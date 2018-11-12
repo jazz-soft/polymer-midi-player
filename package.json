@@ -1,0 +1,38 @@
+{
+  "name": "polymer-midi-player",
+  "version": "0.0.0",
+  "description": "MIDI Player WebComponent",
+  "main": "index.js",
+  "scripts": {
+    "test": "polymer serve --open"
+  },
+  "keywords": [
+    "midi",
+    "music",
+    "player",
+    "polymer",
+    "webcomponent",
+    "web-components",
+    "web-component"
+  ],
+  "author": "jazz-soft (https://jazz-soft.net/)",
+  "dependencies": {
+    "@polymer/polymer": "^3.1.0",
+    "@webcomponents/webcomponentsjs": "^2.1.3",
+    "jzz": "^0.6.2",
+    "jzz-gui-player": "^1.0.1",
+    "jzz-midi-smf": "^1.0.6",
+    "jzz-synth-tiny": "^1.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jazz-soft/polymer-midi-player.git"
+  },
+  "bugs": "https://github.com/jazz-soft/polymer-midi-player/issues",
+  "homepage": "https://github.com/jazz-soft/polymer-midi-player#readme",
+  "license": "MIT",
+  "devDependencies": {
+    "grunt": "^1.0.3",
+    "grunt-contrib-concat": "^1.0.1"
+  }
+}
