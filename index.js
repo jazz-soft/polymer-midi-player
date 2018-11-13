@@ -14,6 +14,10 @@ export class MidiPlayer extends PolymerElement {
       data: {
         type: String,
         notify: true
+      },
+      autoplay: {
+        type: Boolean,
+        notify: true
       }
     }
   }
@@ -21,6 +25,21 @@ export class MidiPlayer extends PolymerElement {
   ready() {
     super.ready();
     this.player = JZZ.gui.Player(this.shadowRoot);
+    this.addEventListener('src-changed', this.srcChanged.bind(this));
+    this.addEventListener('data-changed', this.dataChanged.bind(this));
+    this.addEventListener('autoplay-changed', this.autoplayChanged.bind(this));
+  }
+
+  srcChanged() {
+console.log('SRC changed:', this.src);
+  }
+
+  dataChanged() {
+console.log('DATA changed:', this.data);
+  }
+
+  autoplayChanged() {
+console.log('autoplay changed:', this.autoplay);
   }
 
 }
