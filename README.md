@@ -1,5 +1,6 @@
 # polymer-midi-player
 
+[![npm](https://img.shields.io/npm/v/polymer-midi-player.svg)](https://www.npmjs.com/package/polymer-midi-player)
 
 ## MIDI Player WebComponent
 
@@ -13,7 +14,7 @@
 ```
 -->
 ```html
-<midi-player src=test.mid></midi-player>
+<midi-player src="test.mid" loop=2 autoplay></midi-player>
 ```
 
 ## Testing with Polymer
