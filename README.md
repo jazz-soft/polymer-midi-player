@@ -1,6 +1,7 @@
 # polymer-midi-player
 
 [![npm](https://img.shields.io/npm/v/polymer-midi-player.svg)](https://www.npmjs.com/package/polymer-midi-player)
+[![Published on webcomponents.org](https://img.shields.io/badge/webcomponents.org-published-blue.svg)](https://www.webcomponents.org/element/polymer-midi-player)
 
 ## MIDI Player WebComponent
 
