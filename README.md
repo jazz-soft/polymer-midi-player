@@ -1,5 +1,20 @@
 # polymer-midi-player
-Coming soon...
+
+
+## MIDI Player WebComponent
+
+<!--
+```
+<custom-element-demo>
+  <template>
+    <script type="module" src="index.js"></script>
+  </template>
+</custom-element-demo>
+```
+-->
+```html
+<midi-player src=test.mid></midi-player>
+```
 
 ## Testing with Polymer
 Make sure the Polymer CLI is installed:
