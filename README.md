@@ -5,6 +5,8 @@
 
 ## MIDI Player WebComponent
 
+![midi-player](https://jazz-soft.github.io/img/midi-player.png)
+
 <!--
 ```
 <custom-element-demo>
