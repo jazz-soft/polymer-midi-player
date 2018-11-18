@@ -25,14 +25,14 @@ Playing MIDI files via *Web Audio* and *Web MIDI*
 <midi-player src="test.mid" loop=2 autoplay></midi-player>
 ```
 
-### Attributes
+## Attributes
 `src` - MIDI file URL  
-`data` - contents of MIDI file as String;
+`data` - contents of the MIDI file as String;
 can be used as an alternative to `src`  
 `autoplay` - start playback immediately  
 `loop` - the number of repeats, or `true` for an infinite loop
 
-### API
+## API
 `play()`  
 `pause()`  
 `resume()`  
