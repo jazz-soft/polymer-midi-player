@@ -1,7 +1,7 @@
 {
   "name": "polymer-midi-player",
-  "version": "0.0.1",
-  "description": "MIDI Player WebComponent",
+  "version": "0.0.2",
+  "description": "MIDI Player Web Component",
   "main": "index.js",
   "scripts": {
     "test": "polymer serve --open"
