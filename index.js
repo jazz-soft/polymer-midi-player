@@ -28,7 +28,8 @@ export class MidiPlayer extends PolymerElement {
 
   ready() {
     super.ready();
-    JZZ.synth.Tiny.register('Web Audio');
+    JZZ.synth.Tiny.register('Web Audio 1');
+    JZZ.synth.OSC.register('Web Audio 2');
     this.player = JZZ.gui.Player(this.shadowRoot);
     this.addEventListener('src-changed', this.srcChanged.bind(this));
     this.addEventListener('data-changed', this.dataChanged.bind(this));
