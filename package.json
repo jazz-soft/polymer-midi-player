@@ -1,6 +1,6 @@
 {
   "name": "polymer-midi-player",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "MIDI Player Web Component",
   "main": "index.js",
   "scripts": {
@@ -19,7 +19,7 @@
   "dependencies": {
     "@polymer/polymer": "^3.1.0",
     "@webcomponents/webcomponentsjs": "^2.1.3",
-    "jzz": "^0.6.3",
+    "jzz": "^0.6.4",
     "jzz-gui-player": "^1.0.2",
     "jzz-midi-smf": "^1.0.7",
     "jzz-synth-osc": "^1.1.1",
