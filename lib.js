@@ -13,7 +13,7 @@
 })(this, function() {
 
   var _scope = typeof window === 'undefined' ? global : window;
-  var _version = '0.6.4';
+  var _version = '0.6.5';
   var i, j, k, m, n;
 
   var _time = Date.now || function () { return new Date().getTime(); };
@@ -892,7 +892,7 @@
           },
           _close: function(port) { _engine._closeOut(port); },
           _closeAll: _closeAll,
-          _receive: function(a) { if (impl.dev) this.dev.send(a.slice()); }
+          _receive: function(a) { if (impl.dev && a.length) this.dev.send(a.slice()); }
         };
       }
       var found;
@@ -1036,7 +1036,7 @@
           _start: function() { document.dispatchEvent(new CustomEvent('jazz-midi', { detail: ['openout', plugin.id, name] })); },
           _close: function(port) { _engine._closeOut(port); },
           _closeAll: _closeAll,
-          _receive: function(a) { var v = a.slice(); v.splice(0, 0, 'play', plugin.id); document.dispatchEvent(new CustomEvent('jazz-midi', {detail: v})); }
+          _receive: function(a) { if (a.length) { var v = a.slice(); v.splice(0, 0, 'play', plugin.id); document.dispatchEvent(new CustomEvent('jazz-midi', {detail: v})); } }
         };
         impl.plugin = plugin;
         plugin.output = impl;
@@ -1602,8 +1602,7 @@
     smfSMPTE: function(dd) {
       if (dd instanceof SMPTE) return _smf(84, String.fromCharCode(dd.hour) + String.fromCharCode(dd.minute) + String.fromCharCode(dd.second) + String.fromCharCode(dd.frame) + String.fromCharCode((dd.quarter % 4) * 25));
       var s = '' + dd;
-      if (s.length == 5 && s.charCodeAt(4) < 100) {
-        new SMPTE(30, s.charCodeAt(0), s.charCodeAt(1), s.charCodeAt(2), s.charCodeAt(3), s.charCodeAt(4) / 25);
+      if (s.length == 5) {
         return _smf(84, dd);
       }
       var arr = dd instanceof Array ? dd : Array.prototype.slice.call(arguments);
@@ -3079,7 +3078,7 @@
 
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.0.7';
+  var _ver = '1.0.8';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -3180,7 +3179,8 @@
     if (this.type > 2 || (this.type == 0 && this.ntrk > 1) || (!this.ppf && !this.ppqn)) _error('Invalid MIDI header');
     var n = 0;
     var p = 14;
-    while (p < s.length) {
+    this.warn = [];
+    while (p < s.length - 8) {
       var type = s.substr(p, 4);
       if (type == 'MTrk') n++;
       var len = (s.charCodeAt(p + 4) << 24) + (s.charCodeAt(p + 5) << 16) + (s.charCodeAt(p + 6) << 8) + s.charCodeAt(p + 7);
@@ -3189,8 +3189,9 @@
       this.push(new Chunk(type, data));
       p += len;
     }
-    if (n != this.ntrk) _error("Corrupted MIDI file");
-    if (p > s.length) this.fixed = true;
+    if (n != this.ntrk) _error('Corrupted MIDI file');
+    if (p < s.length) this.warn.push(['extra', s.length - p]);
+    if (p > s.length) this.warn.push(['missing', p - s.length]);
   };
 
   SMF.prototype.dump = function(rmi) {
