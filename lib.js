@@ -2712,13 +2712,13 @@
     }
     else self.loopBtn = _noBtn;
 
-    if (arg.more) {
-      self.moreBtn = new Btn(svg_more);
-      self.moreBtn.div.style.left = right + 'px';
+    if (arg.midi) {
+      self.midiBtn = new Btn(svg_more);
+      self.midiBtn.div.style.left = right + 'px';
       right -= step;
-      self.moreBtn.div.title = 'midi';
-      self.moreBtn.div.addEventListener('click', function() { self.settings(); });
-      self.gui.appendChild(self.moreBtn.div);
+      self.midiBtn.div.title = 'midi';
+      self.midiBtn.div.addEventListener('click', function() { self.settings(); });
+      self.gui.appendChild(self.midiBtn.div);
 
       self.select = document.createElement('select');
       self.select.style.position = 'absolute';
@@ -2733,14 +2733,14 @@
 
       self.gui.appendChild(self.select);
     }
-    else self.moreBtn = _noBtn;
+    else self.midiBtn = _noBtn;
 
-    if (arg.open) {
-      self.openBtn = new Btn(svg_open);
-      self.openBtn.div.style.left = right + 'px';
+    if (arg.file) {
+      self.fileBtn = new Btn(svg_open);
+      self.fileBtn.div.style.left = right + 'px';
       right -= step;
-      self.openBtn.div.title = 'file';
-      self.gui.appendChild(self.openBtn.div);
+      self.fileBtn.div.title = 'file';
+      self.gui.appendChild(self.fileBtn.div);
 
       self.fileInput = document.createElement('input');
       self.fileInput.type = 'file';
@@ -2750,15 +2750,15 @@
       self.gui.appendChild(self.fileInput);
 
       if (window.FileReader) {
-        self.openBtn.off();
-        self.openBtn.div.addEventListener('click', function() { self.fileInput.click(); });
+        self.fileBtn.off();
+        self.fileBtn.div.addEventListener('click', function() { self.fileInput.click(); });
         self.fileInput.addEventListener('change', function(e) { _stopProp(e); self.readFile(e.target.files[0]); });
-        self.gui.addEventListener('drop', function(e) { _stopProp(e); self.openBtn.off(); self.readFile(e.dataTransfer.files[0]); });
-        self.gui.addEventListener('dragover', function(e) { _stopProp(e); self.openBtn.on(); e.dataTransfer.dropEffect = 'copy'; });
-        self.gui.addEventListener('dragexit', function(e) { _stopProp(e); self.openBtn.off(); });
+        self.gui.addEventListener('drop', function(e) { _stopProp(e); self.fileBtn.off(); self.readFile(e.dataTransfer.files[0]); });
+        self.gui.addEventListener('dragover', function(e) { _stopProp(e); self.fileBtn.on(); e.dataTransfer.dropEffect = 'copy'; });
+        self.gui.addEventListener('dragexit', function(e) { _stopProp(e); self.fileBtn.off(); });
       }
     }
-    else self.openBtn = _noBtn;
+    else self.fileBtn = _noBtn;
 
     if (arg.close) {
       self.closeBtn = document.createElement('div');
@@ -2775,7 +2775,7 @@
       self.closeBtn.style.lineSpasing = '0';
       self.closeBtn.innerHTML = svg_close;
       self.closeBtn.title = 'close';
-      self.closeBtn.addEventListener('click', function() { self.close(); });
+      self.closeBtn.addEventListener('click', function() { self.destroy(); });
       self.gui.appendChild(self.closeBtn);
     }
 
@@ -2828,15 +2828,17 @@
       pause: true,
       stop: true,
       loop: true,
-      open: false,
-      more: true,
-      close: false
+      file: false,
+      midi: true,
+      close: false,
+      connect: true
     };
     for (var k in arg) if (arg.hasOwnProperty(k) && typeof x[k] != 'undefined') arg[k] = x[k];
     if (typeof arg.at == 'undefined') arg.at = x;
     if (typeof arg.x == 'undefined') arg.x = x;
     if (typeof arg.y == 'undefined') arg.y = y;
     _createGUI(this, arg);
+    this._conn = arg.connect;
 
     if (typeof arg.at == 'string') {
       try {
@@ -2864,13 +2866,16 @@
     this.gui.addEventListener('mousedown', function(e) { self._startmove(e); });
     document.body.appendChild(this.gui);
   }
+  Player.prototype = new JZZ.Widget();
+  Player.prototype.constructor = Player;
+
   Player.prototype.disable = function() {
     this.playBtn.disable();
     this.pauseBtn.disable();
     this.stopBtn.disable();
     this.loopBtn.disable();
-    this.moreBtn.disable();
-    this.openBtn.off();
+    this.midiBtn.disable();
+    this.fileBtn.off();
     this.rail.style.borderColor = '#aaa';
     this.rail.style.backgroundColor = '#888';
     this.caret.style.borderColor = '#aaa';
@@ -2881,7 +2886,7 @@
     this.pauseBtn.off();
     this.stopBtn.off();
     this.loopBtn.off();
-    if (!this._out) this.moreBtn.off();
+    if (this._conn) this.midiBtn.off();
     this.rail.style.borderColor = '#ccc';
     this.caret.style.backgroundColor = '#aaa';
     this.caret.style.borderColor = '#ccc';
@@ -2889,11 +2894,13 @@
   Player.prototype.load = function(smf) {
     var self = this;
     this._player = smf.player();
-    if (this._out) this._player.connect(this._out);
+    this._player.connect(this);
     this._player.onEnd = function() { self._onEnd(); };
     this.enable();
+    this.onLoad(smf);
   };
   Player.prototype.onEnd = function() {};
+  Player.prototype.onLoad = function() {};
   Player.prototype._onEnd = function() {
     this.onEnd();
     if (this._loop && this._loop != -1) this._loop--;
@@ -2913,37 +2920,46 @@
     }
   };
   Player.prototype._move = function() {
-    var off = Math.round(this._player.position() * this.rlen / this._player.duration()) - 5;
+    var off = Math.round(this._player.positionMS() * this.rlen / this._player.durationMS()) - 5;
     this.caret.style.left = off + 'px';
   };
+  Player.prototype.onPlay = function() {};
+  Player.prototype.onResume = function() {};
   Player.prototype.play = function() {
     if (this._player) {
       var self = this;
       this.playBtn.on();
       this.pauseBtn.off();
-      if (this._out) {
-        if (this._playing) return;
-        this._waiting = false;
-        this._player.connect(this._out);
-        if (this._paused) this._player.resume();
-        else this._player.play();
+      if (this._playing) return;
+      if (this._paused) this.onResume();
+      else this.onPlay();
+      this._playing = true;
+      this._paused = false;
+      if (this._out || !this._conn) {
+        this._player.resume();
         this._moving = setInterval(function() { self._move(); }, 100);
-        this._playing = true;
-        this._paused = false;
       }
       else if (!this._waiting) {
         this._waiting = true;
         JZZ().openMidiOut(undefined, /MIDI Through/i).and(function() {
           self._out = this;
           self._outname = this.name();
-          self.play();
+          self._connect(this);
+          self._waiting = false;
+          if (self._playing) {
+            self._player.resume();
+            self._moving = setInterval(function() { self._move(); }, 100);
+          }
         });
       }
     }
   };
+  Player.prototype.onStop = function() {};
   Player.prototype.stop = function() {
     if (this._player) {
+      var self = this;
       this._player.stop();
+      JZZ.lib.schedule(function() { self.onStop(); });
       if (this._moving) clearInterval(this._moving);
       this._playing = false;
       this._paused = false;
@@ -2952,6 +2968,7 @@
       this._move();
     }
   };
+  Player.prototype.onPause = function() {};
   Player.prototype.pause = function(p) {
     if (this._player) {
       var self = this;
@@ -2959,6 +2976,7 @@
         if (typeof p == 'undefined' || p) {
           if (this._out) {
             this._player.resume();
+            this.onResume();
             this._moving = setInterval(function() { self._move(); }, 100);
             this._playing = true;
             this._paused = false;
@@ -2971,6 +2989,7 @@
       else if (this._playing) {
         if (typeof p == 'undefined' || !p) {
           this._player.pause();
+          JZZ.lib.schedule(function() { self.onPause(); });
           if (this._moving) clearInterval(this._moving);
           this._playing = false;
           this._paused = true;
@@ -2997,7 +3016,7 @@
       }
     }
   };
-  Player.prototype.close = function(n) {
+  Player.prototype.destroy = function(n) {
     this.stop();
     this.gui.parentNode.removeChild(this.gui);
   };
@@ -3012,8 +3031,7 @@
       try {
         var smf = new JZZ.MIDI.SMF(data);
         self.stop();
-        self.load(smf);
-        self.play();
+        JZZ.lib.schedule(function() { self.load(smf); });
       }
       catch (err) {}
     };
@@ -3023,15 +3041,15 @@
   // selecting MIDI
 
   Player.prototype._closeselect = function() {
-    this.moreBtn.off();
+    this.midiBtn.off();
     this.select.style.display = 'none';
     this._more = false;
   };
   Player.prototype.settings = function() {
-    if (!this._player || this._more || this._connector) return;
+    if (!this._player || this._more || !this._conn) return;
     var self = this;
     this._more = true;
-    this.moreBtn.on();
+    this.midiBtn.on();
     this.select.style.display = 'inline-block';
     JZZ().refresh().and(function() {
       var outs = this.info().outputs;
@@ -3048,14 +3066,13 @@
       self._newname = undefined;
       self._closeselect();
     }).and(function() {
-      if (self._connector) return;
       self._outname = self._newname;
-      if (self._player) {
-        self._player.sndOff();
-        self._player.disconnect(self._out);
+      if (self._out) {
+        if (self._playing) for (var c = 0; c < 16; c++) self._out._receive(JZZ.MIDI.allSoundOff(c));
+        self._disconnect(self._out);
       }
       self._out = this;
-      if (self._player) self._player.connect(self._out);
+      self._connect(this);
       self._newname = undefined;
       self._closeselect();
     });
@@ -3075,8 +3092,15 @@
     if (e.keyCode == 13 || e.keyCode == 32) this._selected();
   };
 
+  Player.prototype.type = function() { return this._player ? this._player.type() : 0; };
+  Player.prototype.tracks = function() { return this._player ? this._player.tracks() : 0; };
   Player.prototype.duration = function() { return this._player ? this._player.duration() : 0; };
+  Player.prototype.durationMS = function() { return this._player ? this._player.durationMS() : 0; };
   Player.prototype.position = function() { return this._player ? this._player.position() : 0; };
+  Player.prototype.positionMS = function() { return this._player ? this._player.positionMS() : 0; };
+  Player.prototype.tick2ms = function() { return this._player ? this._player.tick2ms() : 0; };
+  Player.prototype.ms2tick = function() { return this._player ? this._player.ms2tick() : 0; };
+  Player.prototype.onJump = function() {};
   Player.prototype.jump = function(pos) {
     if (this._player) {
       this._player.jump(pos);
@@ -3093,6 +3117,26 @@
           this.pauseBtn.off();
         }
       }
+      this.onJump(this._player.position());
+    }
+  };
+  Player.prototype.jumpMS = function(pos) {
+    if (this._player) {
+      this._player.jumpMS(pos);
+      this._move();
+      if (!this._playing) {
+        if (pos) {
+          this._paused = true;
+          this.playBtn.off();
+          this.pauseBtn.on();
+        }
+        else {
+          this._paused = false;
+          this.playBtn.off();
+          this.pauseBtn.off();
+        }
+      }
+      this.onJump(this._player.position());
     }
   };
 
@@ -3101,6 +3145,7 @@
 
   Player.prototype._mousedown = function(e) {
     if (_lftBtnDn(e) && this._player) {
+      e.preventDefault();
       this.caret.style.backgroundColor = '#ddd';
       this._wasPlaying = this._playing;
       this._player.pause();
@@ -3110,6 +3155,7 @@
   };
   Player.prototype._startmove = function(e) {
     if (_lftBtnDn(e)) {
+      e.preventDefault();
       this._startX = parseInt(this.gui.style.left);
       this._startY = parseInt(this.gui.style.top);
       this._clickX = e.clientX;
@@ -3139,9 +3185,8 @@
       e.preventDefault();
       var to = this._caretPos + e.clientX - this._caretX;
       if (to < 0) to = 0;
-      //if (to > 100) to = 100;
       if (to > this.rlen) to = this.rlen;
-      this.jump(this.duration() * to * 1.0 / this.rlen);
+      this.jumpMS(this.durationMS() * to * 1.0 / this.rlen);
     }
     else if (typeof this._startX != 'undefined') {
       e.preventDefault();
@@ -3150,30 +3195,26 @@
     }
   };
 
+  Player.prototype._connect = Player.prototype.connect;
+  Player.prototype._disconnect = Player.prototype.disconnect;
+
   Player.prototype.connect = function(port) {
-    if (!this._connector) {
-      this._connector = new JZZ.Widget();
-      if (this._player) {
-        if (this._playing) this._player.sndOff();
-        this._player.disconnect();
-        this._player.connect(this._connector);
-      }
-      this.moreBtn.disable();
-      this._out = this._connector;
+    if (port == this) {
+      this._conn = true;
+      if (this._player) this.midiBtn.off();
     }
-    this._connector.connect(port);
+    else {
+      this._connect(port);
+    }
   };
   Player.prototype.disconnect = function(port) {
-    if (this._connector) {
-      if (this._player && this._playing) this._player.sndOff();
-      this._connector.disconnect(port);
-      if (!this._connector.connected()) {
-        this.moreBtn.off();
-        this.select.style.display = 'none';
-        this._out = JZZ().openMidiOut(undefined, /MIDI Through/i);
-        if (this._player) this._player.connect(this._out);
-        this._connector = undefined;
-      }
+    if (port == this) {
+      this._conn = false;
+      if (this._out) this._disconnect(this._out);
+      if (this._player) this.midiBtn.disable();
+    }
+    else {
+      this._disconnect(port);
     }
   };
 
@@ -3194,7 +3235,7 @@
 
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.0.9';
+  var _ver = '1.1.1';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -3398,17 +3439,42 @@
             pp[i]++;
           }
           if (pp[i] >= tt[i].length) continue;
-          if(b) m = tt[i][pp[i]].tt;
+          if (b) m = tt[i][pp[i]].tt;
           b = false;
-          if(m > tt[i][pp[i]].tt) m = tt[i][pp[i]].tt;
+          if (m > tt[i][pp[i]].tt) m = tt[i][pp[i]].tt;
         }
         t = m;
         if (b) break;
       }
     }
-    if (pl.ppqn) pl.mul = pl.ppqn / 500.0;
-    else pl.mul = pl.fps * pl.ppf / 1000.0;
     pl._duration = t;
+    pl._ttt = [];
+    if (pl.ppqn) {
+      pl.mul = pl.ppqn / 500.0; // 120 bpm
+      m = pl.mul;
+      t = 0;
+      pl._durationMS = 0;
+      pl._ttt.push({ t: 0, m: m, ms: 0 });
+      for (i = 0; i < pl._data.length; i++) {
+        e = pl._data[i];
+        if (e.ff == 0x51) {
+          pl._durationMS += (e.tt - t) / m;
+          t = e.tt;
+          m = this.ppqn * 1000.0 / ((e.dd.charCodeAt(0) << 16) + (e.dd.charCodeAt(1) << 8) + e.dd.charCodeAt(2));
+          pl._ttt.push({ t: t, m: m, ms: pl._durationMS });
+        }
+      }
+      pl._durationMS += (pl._duration - t) / m;
+    }
+    else {
+      pl.mul = pl.fps * pl.ppf / 1000.0; // 1s = fps*ppf ticks
+      pl._ttt.push({ t: 0, m: pl.mul, ms: 0 });
+      pl._durationMS = t / pl.mul;
+    }
+    pl._ttt.push({ t: pl._duration, m: 0, ms: pl._durationMS });
+    if (!pl._durationMS) pl._durationMS = 1;
+    pl._type = this.type;
+    pl._tracks = tt.length;
     return pl;
   };
 
@@ -3658,6 +3724,7 @@
     self._loop = 0;
     self._data = [];
     self._pos = 0;
+    self._ms = 0;
     self._tick = (function(x) { return function(){ x.tick(); }; })(self);
     for (var k in Player.prototype) if (Player.prototype.hasOwnProperty(k)) self[k] = Player.prototype[k];
     return self;
@@ -3674,12 +3741,16 @@
     this.paused = false;
     this._ptr = 0;
     this._pos = 0;
+    this._ms = 0;
     this._p0 = 0;
-    this._t0 = _now();
+    this._st = _now();
+    this._t0 = this._st;
     this.tick();
   };
   Player.prototype.stop = function() {
     this._pos = 0;
+    this._ms = 0;
+    this.playing = false;
     this.event = 'stop';
     this.paused = undefined;
   };
@@ -3690,7 +3761,8 @@
     if (this.playing) return;
     if (this.paused) {
       this.event = undefined;
-      this._t0 = _now();
+      this._st = _now();
+      this._t0 = this._st;
       this.playing = true;
       this.paused = false;
       this.tick();
@@ -3720,6 +3792,8 @@
         this._ptr = 0;
         this._p0 = 0;
         this._t0 = t;
+        this._st = t;
+        this._ms = 0;
       }
       else this.stop();
       this.onEnd();
@@ -3728,6 +3802,7 @@
       this.playing = false;
       this.paused = false;
       this._pos = 0;
+      this._ms = 0;
       this._ptr = 0;
       this.sndOff();
       this.event = undefined;
@@ -3735,6 +3810,7 @@
     if (this.event == 'pause') {
       this.playing = false;
       this.paused = true;
+      this._ms += _now() - this._st;
       if (this._pos >= this._duration) this._pos = this._duration - 1;
       this._p0 = this._pos;
       this.sndOff();
@@ -3742,16 +3818,45 @@
     }
     if (this.playing) JZZ.lib.schedule(this._tick);
   };
+  Player.prototype.type = function() { return this._type; };
+  Player.prototype.tracks = function() { return this._tracks; };
   Player.prototype.duration = function() { return this._duration; };
+  Player.prototype.durationMS = function() { return this._durationMS; };
   Player.prototype.position = function() { return this._pos; };
-  Player.prototype.jump = function(pos) {
-    if (isNaN(parseFloat(pos))) _error('Not a number: ' + pos);
-    if (pos < 0) pos = 0;
-    if (pos >= this._duration) pos = this._duration - 1;
-    this._pos = pos;
-    this._p0 = pos;
+  Player.prototype.positionMS = function() { return this.playing ? this._ms + _now() - this._st : this._ms; };
+  Player.prototype.jump = function(t) {
+    if (isNaN(parseFloat(t))) _error('Not a number: ' + t);
+    if (t < 0) t = 0.0;
+    if (t >= this._duration) t = this._duration - 1;
+    this._goto(t, this._t2ms(t));
+  };
+  Player.prototype.jumpMS = function(ms) {
+    if (isNaN(parseFloat(ms))) _error('Not a number: ' + ms);
+    if (ms < 0) ms = 0.0;
+    if (ms >= this._durationMS) ms = this._durationMS - 1;
+    this._goto(this._ms2t(ms), ms);
+  };
+  Player.prototype._t2ms = function(t) {
+    if (!t) return 0.0;
+    var i;
+    for (i = 0; this._ttt[i].t < t; i++) ;
+    i--;
+    return this._ttt[i].ms + (t - this._ttt[i].t) / this._ttt[i].m;
+  };
+  Player.prototype._ms2t = function(ms) {
+    if (!ms) return 0.0;
+    var i;
+    for (i = 0; this._ttt[i].ms < ms; i++) ;
+    i--;
+    return this._ttt[i].t + (ms - this._ttt[i].ms) * this._ttt[i].m;
+  };
+  Player.prototype._goto = function(t, ms) {
+    this._pos = t;
+    this._ms = ms;
+    this._p0 = t;
     this._t0 = _now();
-    if (!this.playing) this.paused = !!pos;
+    this._st = this._t0;
+    if (!this.playing) this.paused = !!t;
     this._toPos();
     if (this.playing) this.sndOff();
   };
@@ -3765,206 +3870,21 @@
       }
     }
   };
+  Player.prototype.tick2ms = function(t) {
+    if (isNaN(parseFloat(t))) _error('Not a number: ' + t);
+    if (t <= 0) return 0.0;
+    if (t >= this._duration) return this._durationMS;
+    return this._t2ms(t);
+  };
+  Player.prototype.ms2tick = function(t) {
+    if (isNaN(parseFloat(t))) _error('Not a number: ' + t);
+    if (t <= 0) return 0.0;
+    if (t >= this._durationMS) return this._duration;
+    return this._ms2t(t);
+  };
   JZZ.MIDI.SMF = SMF;
 });
 
-(function(global, factory) {
-  if (typeof exports === 'object' && typeof module !== 'undefined') {
-    module.exports = factory;
-  }
-  else if (typeof define === 'function' && define.amd) {
-    define('JZZ.synth.OSC', ['JZZ'], factory);
-  }
-  else {
-    factory(JZZ);
-  }
-})(this, function(JZZ) {
-
-  if (!JZZ) return;
-  if (!JZZ.synth) JZZ.synth = {};
-  if (JZZ.synth.OSC) return;
-
-  var _version = '1.1.1';
-
-  var _ac = JZZ.lib.getAudioContext();
-
-  function Synth() {
-    this.ac = _ac;
-    this.dest = this.ac.destination;
-    this.channels = [];
-    this.channel = function(c) {
-      if (!this.channels[c]) {
-        this.channels[c] = new Channel(this);
-        if (c == 9) this.channels[c].note = function(n) {
-          if (!this.notes[n]) this.notes[n] = new Perc(n, this);
-          return this.notes[n];
-        };
-      }
-      return this.channels[c];
-    };
-    this.play = function(arr) {
-      var b = arr[0];
-      var n = arr[1];
-      var v = arr[2];
-      if (b < 0 || b > 255) return;
-      var c = b & 15;
-      var s = b >> 4;
-      if (s == 9) this.channel(c).play(n, v);
-      else if (s == 8) this.channel(c).play(n, 0);
-      else if (s == 0xb) {
-        if (n == 0x78 || n == 0x7b) this.channel(c).allSoundOff();
-        else if (n == 0x40) this.channel(c).damper(!!v);
-      }
-    };
-    this.plug = function(dest) {
-      try {
-        this.ac = undefined;
-        if (dest.context instanceof AudioContext || dest.context instanceof webkitAudioContext) {
-          this.ac = dest.context;
-          this.dest = dest;
-        }
-      }
-      catch (e) {
-        this.ac = undefined;
-      }
-      if (!this.ac) {
-        this.ac = _ac;
-        this.dest = this.ac.destination;
-      }
-    };
-  }
-
-  function Channel(synth) {
-    this.synth = synth;
-    this.notes = [];
-    this.sustain = false;
-    this.note = function(n) {
-      if (!this.notes[n]) this.notes[n] = new Note(n, this);
-      return this.notes[n];
-    };
-    this.play = function(n, v) {
-      this.note(n).play(v);
-    };
-    this.allSoundOff = function() {
-      for (var n = 0; n < this.notes.length; n++) if (this.notes[n]) this.notes[n].stop();
-    };
-    this.damper = function(x) {
-      if (!x && this.sustain != x) {
-        for (var n = 0; n < this.notes.length; n++) if (this.notes[n] && this.notes[n].sustain) this.notes[n].stop();
-      }
-      this.sustain = x;
-    };
-  }
-
-  function Note(n, c) {
-    this.note = n;
-    this.channel = c;
-    this.freq = 440 * Math.pow(2,(n-69)/12);
-    this.stop = function() {
-      try {
-        if (this.oscillator) this.oscillator.stop(0);
-        this.oscillator = undefined;
-        this.sustain = false;
-      }
-      catch (e) {}
-    };
-    this.play = function(v) {
-      if (v || !this.channel.sustain) this.stop();
-      if (!v) {
-        this.sustain = this.channel.sustain;
-        return;
-      }
-      var ampl = v/127;
-      this.oscillator = this.channel.synth.ac.createOscillator();
-      this.oscillator.type = 'sawtooth';
-      this.oscillator.frequency.setTargetAtTime(this.freq, this.channel.synth.ac.currentTime, 0.005);
-      if (!this.oscillator.start) this.oscillator.start = this.oscillator.noteOn;
-      if (!this.oscillator.stop) this.oscillator.stop = this.oscillator.noteOff;
-
-      this.gain = this.channel.synth.ac.createGain();
-      var releaseTime = 2;
-      var now = this.channel.synth.ac.currentTime;
-      this.gain.gain.setValueAtTime(ampl, now);
-      this.gain.gain.exponentialRampToValueAtTime(0.01*ampl, now + releaseTime);
-
-      this.oscillator.connect(this.gain);
-      this.gain.connect(this.channel.synth.dest);
-
-      this.oscillator.start(0);
-    };
-  }
-
-  function Perc(n, c) {
-    this.note = n;
-    this.channel = c;
-    this.freq = 200;
-    this.stop = function() {};
-    this.play = function(v) {
-      if (!v) return;
-
-      var ampl = v/127;
-      this.oscillator = this.channel.synth.ac.createOscillator();
-      this.oscillator.type = 'sine';
-      this.oscillator.frequency.setTargetAtTime(this.freq, this.channel.synth.ac.currentTime, 0.005);
-      if (!this.oscillator.start) this.oscillator.start = this.oscillator.noteOn;
-      if (!this.oscillator.stop) this.oscillator.stop = this.oscillator.noteOff;
-
-      this.gain = this.channel.synth.ac.createGain();
-      var releaseTime = 2;
-      var now = this.channel.synth.ac.currentTime;
-      this.gain.gain.setValueAtTime(ampl, now);
-
-      this.oscillator.connect(this.gain);
-      this.gain.connect(this.channel.synth.dest);
-
-      this.oscillator.start(0);
-      this.oscillator.stop(this.channel.synth.ac.currentTime + 0.04);
-    };
-  }
-
-  var _synth = {};
-  var _noname = [];
-  var _engine = {};
-
-  _engine._info = function(name) {
-    if (!name) name = 'JZZ.synth.OSC';
-    return {
-      type: 'Web Audo',
-      name: name,
-      manufacturer: 'virtual',
-      version: _version
-    };
-  };
-
-  _engine._openOut = function(port, name) {
-    if (!_ac) { port._crash('AudioContext not supported'); return; }
-    var synth;
-    if (typeof name !== 'undefined') {
-      name = '' + name;
-      if (!_synth[name]) _synth[name] = new Synth();
-      synth = _synth[name];
-    }
-    else {
-      synth = new Synth();
-      _noname.push(synth);
-    }
-    port.plug = function(dest) { synth.plug(dest); };
-    port._info = _engine._info(name);
-    port._receive = function(msg) { synth.play(msg); };
-    port._resume();
-  };
-
-  JZZ.synth.OSC = function(name) {
-    return JZZ.lib.openMidiOut(name, _engine);
-  };
-
-  JZZ.synth.OSC.register = function(name) {
-    return _ac ? JZZ.lib.registerMidiOut(name, _engine) : false;
-  };
-
-  JZZ.synth.OSC.version = function() { return _version; };
-
-});
 (function(global, factory) {
   if (typeof exports === 'object' && typeof module !== 'undefined') {
     module.exports = factory;
@@ -3981,7 +3901,7 @@
   if (!JZZ.synth) JZZ.synth = {};
   if (JZZ.synth.Tiny) return;
 
-  var _version = '1.0.3';
+  var _version = '1.0.5';
 
 function WebAudioTinySynth(opt){
   this.__proto__ = this.sy =
@@ -4002,103 +3922,8 @@ function WebAudioTinySynth(opt){
       /**/
     },
     /**/
-    program:[
-// 1-8 : Piano
-      {name:"Acoustic Grand Piano"},    {name:"Bright Acoustic Piano"},
-      {name:"Electric Grand Piano"},    {name:"Honky-tonk Piano"},
-      {name:"Electric Piano 1"},        {name:"Electric Piano 2"},
-      {name:"Harpsichord"},             {name:"Clavi"},
-/* 9-16 : Chromatic Perc*/
-      {name:"Celesta"},                 {name:"Glockenspiel"},
-      {name:"Music Box"},               {name:"Vibraphone"},
-      {name:"Marimba"},                 {name:"Xylophone"},
-      {name:"Tubular Bells"},           {name:"Dulcimer"},
-/* 17-24 : Organ */
-      {name:"Drawbar Organ"},           {name:"Percussive Organ"},
-      {name:"Rock Organ"},              {name:"Church Organ"},
-      {name:"Reed Organ"},              {name:"Accordion"},
-      {name:"Harmonica"},               {name:"Tango Accordion"},
-/* 25-32 : Guitar */
-      {name:"Acoustic Guitar (nylon)"}, {name:"Acoustic Guitar (steel)"},
-      {name:"Electric Guitar (jazz)"},  {name:"Electric Guitar (clean)"},
-      {name:"Electric Guitar (muted)"}, {name:"Overdriven Guitar"},
-      {name:"Distortion Guitar"},       {name:"Guitar harmonics"},
-/* 33-40 : Bass */
-      {name:"Acoustic Bass"},           {name:"Electric Bass (finger)"},
-      {name:"Electric Bass (pick)"},    {name:"Fretless Bass"},
-      {name:"Slap Bass 1"},             {name:"Slap Bass 2"},
-      {name:"Synth Bass 1"},            {name:"Synth Bass 2"},
-/* 41-48 : Strings */
-      {name:"Violin"},                  {name:"Viola"},
-      {name:"Cello"},                   {name:"Contrabass"},
-      {name:"Tremolo Strings"},         {name:"Pizzicato Strings"},
-      {name:"Orchestral Harp"},         {name:"Timpani"},
-/* 49-56 : Ensamble */
-      {name:"String Ensemble 1"},       {name:"String Ensemble 2"},
-      {name:"SynthStrings 1"},          {name:"SynthStrings 2"},
-      {name:"Choir Aahs"},              {name:"Voice Oohs"},
-      {name:"Synth Voice"},             {name:"Orchestra Hit"},
-/* 57-64 : Brass */
-      {name:"Trumpet"},                 {name:"Trombone"},
-      {name:"Tuba"},                    {name:"Muted Trumpet"},
-      {name:"French Horn"},             {name:"Brass Section"},
-      {name:"SynthBrass 1"},            {name:"SynthBrass 2"},
-/* 65-72 : Reed */
-      {name:"Soprano Sax"},             {name:"Alto Sax"},
-      {name:"Tenor Sax"},               {name:"Baritone Sax"},
-      {name:"Oboe"},                    {name:"English Horn"},
-      {name:"Bassoon"},                 {name:"Clarinet"},
-/* 73-80 : Pipe */
-      {name:"Piccolo"},                 {name:"Flute"},
-      {name:"Recorder"},                {name:"Pan Flute"},
-      {name:"Blown Bottle"},            {name:"Shakuhachi"},
-      {name:"Whistle"},                 {name:"Ocarina"},
-/* 81-88 : SynthLead */
-      {name:"Lead 1 (square)"},         {name:"Lead 2 (sawtooth)"},
-      {name:"Lead 3 (calliope)"},       {name:"Lead 4 (chiff)"},
-      {name:"Lead 5 (charang)"},        {name:"Lead 6 (voice)"},
-      {name:"Lead 7 (fifths)"},         {name:"Lead 8 (bass + lead)"},
-/* 89-96 : SynthPad */
-      {name:"Pad 1 (new age)"},         {name:"Pad 2 (warm)"},
-      {name:"Pad 3 (polysynth)"},       {name:"Pad 4 (choir)"},
-      {name:"Pad 5 (bowed)"},           {name:"Pad 6 (metallic)"},
-      {name:"Pad 7 (halo)"},            {name:"Pad 8 (sweep)"},
-/* 97-104 : FX */
-      {name:"FX 1 (rain)"},             {name:"FX 2 (soundtrack)"},
-      {name:"FX 3 (crystal)"},          {name:"FX 4 (atmosphere)"},
-      {name:"FX 5 (brightness)"},       {name:"FX 6 (goblins)"},
-      {name:"FX 7 (echoes)"},           {name:"FX 8 (sci-fi)"},
-/* 105-112 : Ethnic */
-      {name:"Sitar"},                   {name:"Banjo"},
-      {name:"Shamisen"},                {name:"Koto"},
-      {name:"Kalimba"},                 {name:"Bag pipe"},
-      {name:"Fiddle"},                  {name:"Shanai"},
-/* 113-120 : Percussive */
-      {name:"Tinkle Bell"},             {name:"Agogo"},
-      {name:"Steel Drums"},             {name:"Woodblock"},
-      {name:"Taiko Drum"},              {name:"Melodic Tom"},
-      {name:"Synth Drum"},              {name:"Reverse Cymbal"},
-/* 121-128 : SE */
-      {name:"Guitar Fret Noise"},       {name:"Breath Noise"},
-      {name:"Seashore"},                {name:"Bird Tweet"},
-      {name:"Telephone Ring"},          {name:"Helicopter"},
-      {name:"Applause"},                {name:"Gunshot"},
-    ],
-    drummap:[
-// 35
-      {name:"Acoustic Bass Drum"},  {name:"Bass Drum 1"},      {name:"Side Stick"},     {name:"Acoustic Snare"},
-      {name:"Hand Clap"},           {name:"Electric Snare"},   {name:"Low Floor Tom"},  {name:"Closed Hi Hat"},
-      {name:"High Floor Tom"},      {name:"Pedal Hi-Hat"},     {name:"Low Tom"},        {name:"Open Hi-Hat"},
-      {name:"Low-Mid Tom"},         {name:"Hi-Mid Tom"},       {name:"Crash Cymbal 1"}, {name:"High Tom"},
-      {name:"Ride Cymbal 1"},       {name:"Chinese Cymbal"},   {name:"Ride Bell"},      {name:"Tambourine"},
-      {name:"Splash Cymbal"},       {name:"Cowbell"},          {name:"Crash Cymbal 2"}, {name:"Vibraslap"},
-      {name:"Ride Cymbal 2"},       {name:"Hi Bongo"},         {name:"Low Bongo"},      {name:"Mute Hi Conga"},
-      {name:"Open Hi Conga"},       {name:"Low Conga"},        {name:"High Timbale"},   {name:"Low Timbale"},
-      {name:"High Agogo"},          {name:"Low Agogo"},        {name:"Cabasa"},         {name:"Maracas"},
-      {name:"Short Whistle"},       {name:"Long Whistle"},     {name:"Short Guiro"},    {name:"Long Guiro"},
-      {name:"Claves"},              {name:"Hi Wood Block"},    {name:"Low Wood Block"}, {name:"Mute Cuica"},
-      {name:"Open Cuica"},          {name:"Mute Triangle"},    {name:"Open Triangle"},
-    ],
+    program:[],
+    drummap:[],
     program1:[
       // 1-8 : Piano
       [{w:"sine",v:.4,d:0.7,r:0.1,},{w:"triangle",v:3,d:0.7,s:0.1,g:1,a:0.01,k:-1.2}],
@@ -4472,7 +4297,6 @@ function WebAudioTinySynth(opt){
           }
         }.bind(this),60
       );
-      console.log("internalcontext:"+this.internalcontext)
       if(this.internalcontext){
         window.AudioContext = window.AudioContext || window.webkitAudioContext;
         this.setAudioContext(new AudioContext());
@@ -4498,61 +4322,6 @@ function WebAudioTinySynth(opt){
     setVoices:function(v){
       this.voices=v;
     },
-    getPlayStatus:function(){
-      return {play:this.playing, maxTick:this.maxTick, curTick:this.playTick};
-    },
-    locateMIDI:function(tick){
-      var i,p=this.playing;
-      this.stopMIDI();
-      for(i=0;i<this.song.ev.length && tick>this.song.ev[i].t;++i){
-        var m=this.song.ev[i];
-        var ch=m.m[0]&0xf;
-        switch(m.m[0]&0xf0){
-        case 0xb0:
-          switch(m.m[1]){
-          case 1:  this.setModulation(ch,m.m[2]); break;
-          case 7:  this.setChVol(ch,m.m[2]); break;
-          case 10: this.setPan(ch,m.m[2]); break;
-          case 11: this.setExpression(ch,m.m[2]); break;
-          case 64: this.setSustain(ch,m.m[2]); break;
-          }
-          break;
-        case 0xc0: this.pg[m.m[0]&0x0f]=m.m[1]; break;
-        }
-        if(m.m[0]==0xff51)
-          this.song.tempo=m.m[1];
-      }
-      if(!this.song.ev[i]){
-        this.playIndex=0;
-        this.playTick=this.maxTick;
-      }
-      else{
-        this.playIndex=i;
-        this.playTick=this.song.ev[i].t;
-      }
-      if(p)
-        this.playMIDI();
-    },
-    getTimbreName:function(m,n){
-      if(m==0)
-        return this.program[n].name;
-      else
-        return this.drummap[n-35].name;
-    },
-    loadMIDIUrl:function(url){
-      if(!url)
-        return;
-      var xhr=new XMLHttpRequest();
-      xhr.open("GET",url,true);
-      xhr.responseType="arraybuffer";
-      xhr.loadMIDI=this.loadMIDI.bind(this);
-      xhr.onload=function(e){
-        if(this.status==200){
-          this.loadMIDI(this.response);
-        }
-      };
-      xhr.send();
-    },
     reset:function(){
       for(var i=0;i<16;++i){
         this.setProgram(i,0);
@@ -4564,134 +4333,6 @@ function WebAudioTinySynth(opt){
         this.rhythm[i]=0;
       }
       this.rhythm[9]=1;
-    },
-    stopMIDI:function(){
-      this.playing=0;
-      for(var i=0;i<16;++i)
-        this.allSoundOff(i);
-    },
-    playMIDI:function(){
-      if(!this.song)
-        return;
-      var dummy=this.actx.createOscillator();
-      dummy.connect(this.actx.destination);
-      dummy.frequency.value=0;
-      dummy.start(0);
-      dummy.stop(this.actx.currentTime+0.001);
-      if(this.playTick>=this.maxTick)
-        this.playTick=0,this.playIndex=0;
-      this.playTime=this.actx.currentTime+.1;
-      this.tick2Time=4*60/this.song.tempo/this.song.timebase;
-      this.playing=1;
-    },
-    loadMIDI:function(data){
-      function Get2(s, i) { return (s[i]<<8) + s[i+1]; }
-      function Get3(s, i) { return (s[i]<<16) + (s[i+1]<<8) + s[i+2]; }
-      function Get4(s, i) { return (s[i]<<24) + (s[i+1]<<16) + (s[i+2]<<8) + s[i+3]; }
-      function GetStr(s, i, len) {
-        return String.fromCharCode.apply(null,s.slice(i,i+len));
-      }
-      function Delta(s, i) {
-        var v, d;
-        v = 0;
-        datalen = 1;
-        while((d = s[i]) & 0x80) {
-          v = (v<<7) + (d&0x7f);
-          ++datalen;
-          ++i;
-        }
-        return (v<<7)+d;
-      }
-      function Msg(song,tick,s,i){
-        var v=s[i];
-        datalen=1;
-        if((v&0x80)==0)
-          v=runst,datalen=0;
-        runst=v;
-        switch(v&0xf0){
-        case 0xc0: case 0xd0:
-          song.ev.push({t:tick,m:[v,s[i+datalen]]});
-          datalen+=1;
-          break;
-        case 0xf0:
-          switch(v) {
-          case 0xf0:
-          case 0xf7:
-            var len=Delta(s,i+1);
-            datastart=1+datalen;
-            var exd=Array.from(s.slice(i+datastart,i+datastart+len));
-            exd.unshift(0xf0);
-            song.ev.push({t:tick,m:exd});
-/*
-            var sysex=[];
-            for(var jj=0;jj<len;++jj)
-              sysex.push(s[i+datastart+jj].toString(16));
-            console.log(sysex);
-*/
-            datalen+=len+1;
-            break;
-          case 0xff:
-            var len = Delta(s, i + 2);
-            datastart = 2+datalen;
-            datalen = len+datalen+2;
-            switch(s[i+1]) {
-            case 0x02: song.copyright+=GetStr(s, i + datastart, datalen - 3); break;
-            case 0x01: case 0x03: case 0x04: case 0x09:
-              song.text=GetStr(s, i + datastart, datalen - datastart);
-              break;
-            case 0x2f:
-              return 1;
-            case 0x51:
-              var val = Math.floor(60000000 / Get3(s, i + 3));
-              song.ev.push({t:tick, m:[0xff51, val]});
-              break;
-            }
-            break;
-          }
-          break;
-        default:
-          song.ev.push({t:tick,m:[v,s[i+datalen],s[i+datalen+1]]});
-          datalen+=2;
-        }
-        return 0;
-      }
-      this.stopMIDI();
-      var s=new Uint8Array(data);
-      var datalen = 0, datastart = 0, runst = 0x90;
-      var idx = 0;
-      var hd = s.slice(0,  4);
-      if(hd.toString()!="77,84,104,100")  //MThd
-        return;
-      var len = Get4(s, 4);
-      var fmt = Get2(s, 8);
-      var numtrk = Get2(s, 10);
-      this.maxTick=0;
-      var tb = Get2(s, 12)*4;
-      idx = (len + 8);
-      this.song={copyright:"",text:"",tempo:120,timebase:tb,ev:[]};
-      for(var tr=0;tr<numtrk;++tr){
-        hd=s.slice(idx, idx+4);
-        len=Get4(s, idx+4);
-        if(hd.toString()=="77,84,114,107") {//MTrk
-          var tick = 0;
-          var j = 0;
-          this.notetab.length = 0;
-          for(;;) {
-            tick += Delta(s, idx + 8 + j);
-            j += datalen;
-            var e = Msg(this.song, tick, s, idx + 8 + j);
-            j += datalen;
-            if(e)
-              break;
-          }
-          if(tick>this.maxTick)
-            this.maxTick=tick;
-        }
-        idx += (len+8);
-      }
-      this.song.ev.sort(function(x,y){return x.t-y.t});
-      this.reset();
-      this.locateMIDI(0);
     },
     setQuality:function(q){
       var i,k,n,p;
@@ -4722,9 +4363,9 @@ function WebAudioTinySynth(opt){
         return p;
       }
       if(m && n>=35 && n<=81)
-        this.drummap[n-35].p=filldef(p);
+        this.drummap[n-35] = filldef(p);
       if(m==0 && n>=0 && n<=127)
-        this.program[n].p=filldef(p);
+        this.program[n] = filldef(p);
     },
     _pruneNote:function(nt){
       for(var k=nt.o.length-1;k>=0;--k){
@@ -4910,10 +4551,10 @@ function WebAudioTinySynth(opt){
       t=this._tsConv(t);
       if(this.rhythm[ch]){
         if(n>=35&&n<=81)
-          this._note(t,ch,n,v,this.drummap[n-35].p);
+          this._note(t,ch,n,v,this.drummap[n-35]);
         return;
       }
-      this._note(t,ch,n,v,this.program[this.pg[ch]].p);
+      this._note(t,ch,n,v,this.program[this.pg[ch]]);
     },
     noteOff:function(ch,n,t){
       if(this.rhythm[ch])
@@ -4987,13 +4628,11 @@ function WebAudioTinySynth(opt){
           var ds=[];
           for(var ii=0;ii<msg.length;++ii)
             ds.push(msg[ii].toString(16));
-          console.log(ds);
         }
         if(msg[1]==0x41&&msg[2]==0x10&&msg[3]==0x42&&msg[4]==0x12&&msg[5]==0x40){
           if((msg[6]&0xf0)==0x10&&msg[7]==0x15){
             var ch=[9,0,1,2,3,4,5,6,7,8,10,11,12,13,14,15][msg[6]&0xf];
             this.rhythm[ch]=msg[8];
-//            console.log("UseForRhythmPart("+ch+")="+msg[8]);
           }
         }
         break;
@@ -5015,7 +4654,6 @@ function WebAudioTinySynth(opt){
       if(!dest)
         this.dest=actx.destination;
       this.tsdiff=performance.now()*.001-this.actx.currentTime;
-      console.log("TSDiff:"+this.tsdiff);
       this.out=this.actx.createGain();
       this.comp=this.actx.createDynamicsCompressor();
       var blen=this.actx.sampleRate*.5|0;

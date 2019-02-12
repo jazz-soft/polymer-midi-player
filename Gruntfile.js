@@ -6,7 +6,6 @@ module.exports = function(grunt) {
           "node_modules/jzz/javascript/JZZ.js",
           "node_modules/jzz-gui-player/javascript/JZZ.gui.Player.js",
           "node_modules/jzz-midi-smf/javascript/JZZ.midi.SMF.js",
-          "node_modules/jzz-synth-osc/javascript/JZZ.synth.OSC.js",
           "node_modules/jzz-synth-tiny/javascript/JZZ.synth.Tiny.js"
         ],
         dest: "lib.js"
