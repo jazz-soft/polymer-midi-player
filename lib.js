@@ -13,7 +13,7 @@
 })(this, function() {
 
   var _scope = typeof window === 'undefined' ? global : window;
-  var _version = '0.7.1';
+  var _version = '0.7.3';
   var i, j, k, m, n;
 
   var _time = Date.now || function () { return new Date().getTime(); };
@@ -1576,6 +1576,18 @@
       }
       return _smf(32, dd);
     },
+    smfMidiPort: function(dd) {
+      if (dd == parseInt(dd)) {
+        if (dd < 0 || dd > 127) throw RangeError('Port number out of range: ' + dd);
+        dd = String.fromCharCode(dd);
+      }
+      else {
+        dd = '' + dd;
+        if (dd.length == 0) dd = '\x00';
+        else if (dd.length > 1 || dd.charCodeAt(0) > 127) throw RangeError('Port number out of range: ' + _smftxt(dd));
+      }
+      return _smf(33, dd);
+    },
     smfEndOfTrack: function(dd) {
       if (_2s(dd) != '') throw RangeError('Unexpected data: ' + _smftxt(_2s(dd)));
       return _smf(47);
@@ -1644,7 +1656,7 @@
       if (dd.length == 2 && dd.charCodeAt(1) <= 1 && (dd.charCodeAt(0) <= 7 || dd.charCodeAt(0) <= 255 && dd.charCodeAt(0) >= 249)) return _smf(89, dd);
       throw RangeError('Incorrect key signature: ' + _smftxt(dd));
     },
-    smfMetaEvent: function(dd) { return _smf(127, _2s(dd)); }
+    smfSequencer: function(dd) { return _smf(127, _2s(dd)); }
   };
 
   function _copyPortHelper(M, name, func) {
@@ -1851,6 +1863,7 @@
         if (this.ff == 0) s += 'Sequence Number: ' + _s2n(this.dd);
         else if (this.ff > 0 && this.ff < 10) s += ['', 'Text', 'Copyright', 'Sequence Name', 'Instrument Name', 'Lyric', 'Marker', 'Cue Point', 'Program Name', 'Device Name'][this.ff] + _smftxt(this.dd);
         else if (this.ff == 32) s += 'Channel Prefix' + _smfhex(this.dd);
+        else if (this.ff == 33) s += 'MIDI Port' + _smfhex(this.dd);
         else if (this.ff == 47) s += 'End of Track' + _smfhex(this.dd);
         else if (this.ff == 81) {
           var ms = this.dd.charCodeAt(0) * 65536 + this.dd.charCodeAt(1) * 256 + this.dd.charCodeAt(2);
@@ -1875,7 +1888,7 @@
             if (mi) s += ' min';
           }
         }
-        else if (this.ff == 127) s += 'Meta Event' + _smfhex(this.dd);
+        else if (this.ff == 127) s += 'Sequencer Specific' + _smfhex(this.dd);
         else s += 'SMF' + _smfhex(this.dd);
         return s;
       }
@@ -2611,7 +2624,7 @@
   if (JZZ.gui.Player) return;
 
   function empty() {}
-  var _noBtn = { on: empty, off: empty, disable: empty, div: {} };
+  var _noBtn = { on: empty, off: empty, disable: empty, title: empty, div: {} };
 
   function Btn(html) {
     this.div = document.createElement('div');
@@ -2646,6 +2659,7 @@
     this.div.style.borderColor = '#aaa';
     this.div.firstChild.style.fill = '#555';
   };
+  Btn.prototype.title = function(s) { this.div.title = s; };
   var svg_play = '<svg fill="#555" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z"/><path d="M0 0h24v24H0z" fill="none"/></svg>';
   var svg_pause = '<svg fill="#555" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/><path d="M0 0h24v24H0z" fill="none"/></svg>';
   var svg_stop = '<svg fill="#555" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="M0 0h24v24H0z" fill="none"/><path d="M6 6h12v12H6z"/></svg>';
@@ -2721,18 +2735,18 @@
       self.midiBtn.div.addEventListener('click', function() { self.settings(); });
       self.gui.appendChild(self.midiBtn.div);
 
-      self.select = document.createElement('select');
-      self.select.style.position = 'absolute';
-      self.select.style.top = '30px';
-      self.select.style.left = '40px';
-      self.select.style.width = '230px';
-      self.select.style.display = 'none';
-      self.select.style.zIndex = 1;
-      self.select.addEventListener('click', function() { self._selected(); });
-      self.select.addEventListener('keydown', function(e) { self._keydown(e); });
-      self.select.addEventListener('focusout', function() { self._closeselect(); });
+      self.sel = document.createElement('select');
+      self.sel.style.position = 'absolute';
+      self.sel.style.top = '30px';
+      self.sel.style.left = '40px';
+      self.sel.style.width = '230px';
+      self.sel.style.display = 'none';
+      self.sel.style.zIndex = 1;
+      self.sel.addEventListener('click', function() { self._selected(); });
+      self.sel.addEventListener('keydown', function(e) { self._keydown(e); });
+      self.sel.addEventListener('focusout', function() { self._closeselect(); });
 
-      self.gui.appendChild(self.select);
+      self.gui.appendChild(self.sel);
     }
     else self.midiBtn = _noBtn;
 
@@ -2761,7 +2775,7 @@
       if (window.FileReader) {
         self.fileBtn.off();
         self.fileBtn.div.addEventListener('click', function() { self.fileInput.click(); });
-        self.fileInput.addEventListener('change', function(e) { _stopProp(e); self.readFile(e.target.files[0]); });
+        self.fileInput.addEventListener('change', function(e) { _stopProp(e); if (e.target.files[0]) self.readFile(e.target.files[0]); });
         self.gui.addEventListener('drop', function(e) { _stopProp(e); self.fileBtn.off(); self.readFile(e.dataTransfer.files[0]); });
         self.gui.addEventListener('dragover', function(e) { _stopProp(e); self.fileBtn.on(); e.dataTransfer.dropEffect = 'copy'; });
         self.gui.addEventListener('dragexit', function(e) { _stopProp(e); self.fileBtn.off(); });
@@ -2844,6 +2858,7 @@
       link: false,
       midi: true,
       close: false,
+      ports: [undefined, /MIDI Through/i],
       connect: true
     };
     if (typeof x == 'object') for (var k in arg) if (arg.hasOwnProperty(k) && typeof x[k] != 'undefined') arg[k] = x[k];
@@ -2851,6 +2866,9 @@
     if (typeof arg.x == 'undefined') arg.x = x;
     if (typeof arg.y == 'undefined') arg.y = y;
     _createGUI(this, arg);
+    if (!(arg.ports instanceof Array)) arg.ports = [arg.ports];
+    arg.ports.push(undefined);
+    this._ports = arg.ports;
     this._conn = arg.connect;
 
     if (typeof arg.at == 'string') {
@@ -2927,9 +2945,9 @@
       if (this._loop == 1) {
         this._loop = 0;
         this.loopBtn.off();
-        this.loopBtn.div.title = 'loop';
+        this.loopBtn.title('loop');
       }
-      else this.loopBtn.div.title = 'loop: ' + (this._loop == -1 ? '\u221e' : this._loop);
+      else this.loopBtn.title('loop: ' + (this._loop == -1 ? '\u221e' : this._loop));
     }
   };
   Player.prototype._move = function() {
@@ -2954,9 +2972,10 @@
       }
       else if (!this._waiting) {
         this._waiting = true;
-        JZZ().openMidiOut([undefined, /MIDI Through/i]).and(function() {
+        JZZ().openMidiOut(self._ports).and(function() {
           self._out = this;
           self._outname = this.name();
+          self.midiBtn.title(self._outname);
           self._connect(this);
           self._waiting = false;
           if (self._playing) {
@@ -3021,11 +3040,11 @@
       this._player.loop(this._loop);
       if (this._loop) {
         this.loopBtn.on();
-        this.loopBtn.div.title = 'loop: ' + (this._loop == -1 ? '\u221e' : this._loop);
+        this.loopBtn.title('loop: ' + (this._loop == -1 ? '\u221e' : this._loop));
       }
       else {
         this.loopBtn.off();
-        this.loopBtn.div.title = 'loop';
+        this.loopBtn.title('loop');
       }
     }
   };
@@ -3075,16 +3094,17 @@
         JZZ.lib.schedule(function() { self.load(smf); });
         if (self.linkBtn) self.setUrl('data:audio/midi;base64,' + JZZ.lib.toBase64(data), f.name);
       }
-      catch (err) {}
+      catch (err) { console.log(err.message); }
     };
     reader.readAsArrayBuffer(f);
   };
 
   // selecting MIDI
 
+  Player.prototype.onSelect = function() {};
   Player.prototype._closeselect = function() {
     this.midiBtn.off();
-    this.select.style.display = 'none';
+    this.sel.style.display = 'none';
     this._more = false;
   };
   Player.prototype.settings = function() {
@@ -3092,14 +3112,14 @@
     var self = this;
     this._more = true;
     this.midiBtn.on();
-    this.select.style.display = 'inline-block';
+    this.sel.style.display = 'inline-block';
     JZZ().refresh().and(function() {
       var outs = this.info().outputs;
       var i;
-      for (i = 0; i < self.select.options.length; i++) self.select.remove(i);
-      for (i = 0; i < outs.length; i++) self.select[i] = new Option(outs[i].name, outs[i].name, outs[i].name == self._outname, outs[i].name == self._outname);
-      self.select.size = outs.length < 2 ? 2 : outs.length;
-      self.select.focus();
+      for (i = 0; i < self.sel.options.length; i++) self.sel.remove(i);
+      for (i = 0; i < outs.length; i++) self.sel[i] = new Option(outs[i].name, outs[i].name, outs[i].name == self._outname, outs[i].name == self._outname);
+      self.sel.size = outs.length < 2 ? 2 : outs.length;
+      self.sel.focus();
     });
   };
   Player.prototype._selectMidi = function() {
@@ -3118,18 +3138,23 @@
       self._connect(this);
       self._newname = undefined;
       self._closeselect();
+      self.midiBtn.title(self._outname);
+      setTimeout(function() { self.onSelect(self._outname); }, 0);
     });
   };
-  Player.prototype._selected = function() {
+  Player.prototype.select = function(name) {
     var self = this;
-    this._newname = this.select.options[this.select.selectedIndex].value;
+    this._newname = name;
     if (this._newname == this._outname) {
       this._newname = undefined;
-      self._closeselect();
+      this._closeselect();
     }
     else {
       setTimeout(function() { self._selectMidi(); }, 0);
     }
+  };
+  Player.prototype._selected = function() {
+    this.select(this.sel.options[this.sel.selectedIndex].value);
   };
   Player.prototype._keydown = function(e) {
     if (e.keyCode == 13 || e.keyCode == 32) this._selected();
@@ -3284,7 +3309,7 @@
 
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.1.5';
+  var _ver = '1.1.6';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -3362,9 +3387,14 @@
     return smf;
   };
 
+  function _issue(off, msg, data, tick) {
+    var w = { off: off, msg: msg, data: data };
+    if (typeof tick != 'undefined') w.tick = tick;
+    return w;
+  }
   SMF.prototype._complain = function(off, msg, data) {
     if (!this._warn) this._warn = [];
-    this._warn.push({ off: off, msg: msg, data: data });
+    this._warn.push(_issue(off, msg, data));
   };
   SMF.prototype.load = function(s) {
     var off = 0;
@@ -3379,7 +3409,6 @@
   var MThd0006 = 'MThd' + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(0) + String.fromCharCode(6);
   SMF.prototype.loadSMF = function(s, off) {
     if (!s.length) _error('Empty file');
-    off = off;
     if (s.substr(0, 8) != MThd0006) {
       var z = s.indexOf(MThd0006);
       if (z != -1) {
@@ -3408,6 +3437,10 @@
       var type = s.substr(p, 4);
       if (type == 'MTrk') n++;
       var len = (s.charCodeAt(p + 4) << 24) + (s.charCodeAt(p + 5) << 16) + (s.charCodeAt(p + 6) << 8) + s.charCodeAt(p + 7);
+      if (len <= 0) { // broken file
+        len = s.length - p - 8;
+        this._complain(p + off + 4, 'Invalid track length', s.charCodeAt(p + 4) + '/' + s.charCodeAt(p + 5) + '/' + s.charCodeAt(p + 6) + '/' + s.charCodeAt(p + 7));
+      }
       p += 8;
       var data = s.substr(p, len);
       this.push(new Chunk(type, data, offset));
@@ -3430,17 +3463,13 @@
     return ret;
   }
   SMF.prototype.validate = function() {
-    var i, j, k, z;
+    var i, j, k;
     var w = [];
     if (this._warn) for (i = 0; i < this._warn.length; i++) w.push(_copy(this._warn[i]));
     k = 0;
     for (i = 0; i < this.length; i++) if (this[i] instanceof MTrk) {
       k++;
-      if (this[i]._warn) for (j = 0; j < this[i]._warn.length; j++) {
-        z = _copy(this[i]._warn[j]);
-        z.track = k;
-        w.push(z);
-      }
+      this[i]._validate(w, k);
     }
     w.sort(function(a, b) {
       return (a.off || 0) - (b.off || 0) || (a.track || 0) - (b.track || 0) || (a.tick || 0) - (b.tick || 0);
@@ -3701,11 +3730,74 @@
     for (var i = 0; i < this.length; i++) trk.push(new JZZ.MIDI(this[i]));
     return trk;
   };
+  function _metaevent_len(msg, name, len) {
+    if (msg.dd.length < len) return _issue(msg._off, 'Invalid ' + name + ' meta event: ' + (msg.dd.length ? 'data too short' : 'no data'), msg.toString(), msg.tt);
+    if (msg.dd.length > len) return _issue(msg._off, 'Invalid ' + name + ' meta event: data too long', msg.toString(), msg.tt);
+  }
+  function _validate_midi(msg) {
+    var issue;
+    if (typeof msg.ff != 'undefined') {
+      if (msg.ff > 0x7f) return _issue(msg._off, 'Invalid meta event', msg.toString(), msg.tt);
+      else if (msg.ff == 0) {
+        issue = _metaevent_len(msg, 'Sequence Number', 2); if (issue) return issue;
+      }
+      else if (msg.ff < 10) {
+        if (!msg.dd.length) return _issue(msg._off, 'Invalid Text meta event: no data', msg.toString(), msg.tt);
+      }
+      else if (msg.ff == 32) {
+        issue = _metaevent_len(msg, 'Channel Prefix', 1); if (issue) return issue;
+        if (msg.dd.charCodeAt(0) > 15) return _issue(msg._off, 'Invalid Channel Prefix meta event: incorrect data', msg.toString(), msg.tt);
+      }
+      else if (msg.ff == 33) {
+        issue = _metaevent_len(msg, 'MIDI Port', 1); if (issue) return issue;
+        if (msg.dd.charCodeAt(0) > 127) return _issue(msg._off, 'Invalid MIDI Port meta event: incorrect data', msg.toString(), msg.tt);
+      }
+      else if (msg.ff == 47) {
+        issue = _metaevent_len(msg, 'End of Track', 0); if (issue) return issue;
+      }
+      else if (msg.ff == 81) {
+        issue = _metaevent_len(msg, 'Tempo', 3); if (issue) return issue;
+      }
+      else if (msg.ff == 84) {
+        issue = _metaevent_len(msg, 'SMPTE', 5); if (issue) return issue;
+        if (msg.dd.charCodeAt(0) >= 24 || msg.dd.charCodeAt(1) >= 60 || msg.dd.charCodeAt(2) >= 60 || msg.dd.charCodeAt(3) >= 30 || msg.dd.charCodeAt(4) >= 200 || msg.dd.charCodeAt(4) % 25) return _issue(msg._off, 'Invalid SMPTE meta event: incorrect data', msg.toString(), msg.tt);
+      }
+      else if (msg.ff == 88) {
+        issue = _metaevent_len(msg, 'Time Signature', 4); if (issue) return issue;
+        if (msg.dd.charCodeAt(1) > 8) return _issue(msg._off, 'Invalid Time Signature meta event: incorrect data', msg.toString(), msg.tt);
+      }
+      else if (msg.ff == 89) {
+        issue = _metaevent_len(msg, 'Key Signature', 2); if (issue) return issue;
+        if (msg.dd.charCodeAt(1) > 1 || msg.dd.charCodeAt(0) > 255 || (msg.dd.charCodeAt(0) > 7 && msg.dd.charCodeAt(0) < 249)) return _issue(msg._off, 'Invalid Key Signature meta event: incorrect data', msg.toString(), msg.tt);
+      }
+      else if (msg.ff == 127) {
+        // Sequencer Specific meta event
+      }
+      else {
+        return _issue(msg._off, 'Unknown meta event', msg.toString(), msg.tt);
+      }
+    }
+    else {
+    }
+  }
+  MTrk.prototype._validate = function(w, k) {
+    var i, z;
+    if (this._warn) for (i = 0; i < this._warn.length; i++) {
+      z = _copy(this._warn[i]);
+      z.track = k;
+      w.push(z);
+    }
+    for (i = 0; i < this.length; i++) {
+      z = _validate_midi(this[i]);
+      if (z) {
+        z.track = k;
+        w.push(z);
+      }
+    }
+  };
   MTrk.prototype._complain = function(off, msg, data, tick) {
     if (!this._warn) this._warn = [];
-    var w = { off: off, msg: msg, data: data };
-    if (typeof tick != 'undefined') w.tick = tick;
-    this._warn.push(w);
+    this._warn.push(_issue(off, msg, data, tick));
   };
   MTrk.prototype.dump = function() {
     var s = '';
@@ -4034,7 +4126,7 @@
   if (!JZZ.synth) JZZ.synth = {};
   if (JZZ.synth.Tiny) return;
 
-  var _version = '1.0.8';
+  var _version = '1.0.9';
 
 function WebAudioTinySynth(opt){
   this.__proto__ = this.sy =
@@ -4534,7 +4626,6 @@ function WebAudioTinySynth(opt){
       }
     },
     _note:function(t,ch,n,v,p){
-      var self = this;
       var out,sc,pn;
       var o=[],g=[],vp=[],fp=[],r=[];
       var f=440*Math.pow(2,(n-69)/12);
@@ -4590,12 +4681,8 @@ function WebAudioTinySynth(opt){
         this._setParamTarget(g[i].gain,pn.s*vp[i],dt,pn.d);
         o[i].start(t);
         if(this.rhythm[ch]){
-          // difference between '()=>' and 'function()' 
-          var _ch = ch;
-          var _oi = o[i];
-          o[i].onended = function() {
-              self.chmod[_ch].disconnect(_oi.detune);
-          };
+          // difference between '()=>' and 'function()': need to pack parameters
+          o[i].onended = function(a, b) { return function() { a.disconnect(b); }; }(this.chmod[ch], o[i].detune);
           o[i].stop(t+p[0].d*this.releaseRatio);
         }
       }
