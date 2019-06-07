@@ -8,6 +8,8 @@
   "license": "MIT",
   "keywords": [
     "midi",
+    "midi-file",
+    "midi-player",
     "music",
     "player",
     "polymer",
