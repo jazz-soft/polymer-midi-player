@@ -19,8 +19,8 @@
   ],
   "author": "jazz-soft (https://jazz-soft.net/)",
   "dependencies": {
-    "@polymer/polymer": "^3.1.0",
-    "@webcomponents/webcomponentsjs": "^2.1.3",
+    "@polymer/polymer": "^3.2.0",
+    "@webcomponents/webcomponentsjs": "^2.2.10",
     "jzz": "^0.8.0",
     "jzz-gui-player": "^1.2.7",
     "jzz-midi-smf": "^1.2.4",
