@@ -13,7 +13,7 @@
 })(this, function() {
 
   var _scope = typeof window === 'undefined' ? global : window;
-  var _version = '0.9.3';
+  var _version = '1.0.2';
   var i, j, k, m, n;
 
   var _time = Date.now || function () { return new Date().getTime(); };
@@ -591,8 +591,10 @@
   }
 
   // Web MIDI API
+  var _navigator;
   var _requestMIDIAccess;
   if (typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
+    _navigator = navigator;
     _requestMIDIAccess = navigator.requestMIDIAccess;
     try {
       if (_requestMIDIAccess.toString().indexOf('JZZ(') != -1) _requestMIDIAccess = undefined;
@@ -610,7 +612,7 @@
         self._crash(msg);
       };
       var opt = {};
-      _requestMIDIAccess(opt).then(onGood, onBad);
+      _requestMIDIAccess.call(_navigator, opt).then(onGood, onBad);
       this._pause();
       return;
     }
@@ -627,7 +629,7 @@
         self._crash(msg);
       };
       var opt = {sysex:true};
-      _requestMIDIAccess(opt).then(onGood, onBad);
+      _requestMIDIAccess.call(_navigator, opt).then(onGood, onBad);
       this._pause();
       return;
     }
@@ -716,6 +718,7 @@
 
   function _initNONE() {
     _engine._type = 'none';
+    _engine._version = _version;
     _engine._sysex = true;
     _engine._outs = [];
     _engine._ins = [];
@@ -835,7 +838,7 @@
     _engine._closeOut = function(port) {
       var impl = port._impl;
       _pop(impl.clients, port._orig);
-      if (!impl.clients.length) {
+      if (!impl.clients.length && impl.open) {
         impl.open = false;
         impl.plugin.MidiOutClose();
       }
@@ -843,7 +846,7 @@
     _engine._closeIn = function(port) {
       var impl = port._impl;
       _pop(impl.clients, port._orig);
-      if (!impl.clients.length) {
+      if (!impl.clients.length && impl.open) {
         impl.open = false;
         impl.plugin.MidiInClose();
       }
@@ -1139,7 +1142,7 @@
     _engine._closeOut = function(port) {
       var impl = port._impl;
       _pop(impl.clients, port._orig);
-      if (!impl.clients.length) {
+      if (!impl.clients.length && impl.open) {
         impl.open = false;
         document.dispatchEvent(new CustomEvent('jazz-midi', { detail: ['closeout', impl.plugin.id] }));
       }
@@ -1147,7 +1150,7 @@
     _engine._closeIn = function(port) {
       var impl = port._impl;
       _pop(impl.clients, port._orig);
-      if (!impl.clients.length) {
+      if (!impl.clients.length && impl.open) {
         impl.open = false;
         document.dispatchEvent(new CustomEvent('jazz-midi', { detail: ['closein', impl.plugin.id] }));
       }
@@ -2216,11 +2219,13 @@
             osc.start(0.1); osc.stop(0.11);
           }
           else {
+            document.removeEventListener('touchstart', _activateAudioContext);
             document.removeEventListener('touchend', _activateAudioContext);
             document.removeEventListener('mousedown', _activateAudioContext);
             document.removeEventListener('keydown', _activateAudioContext);
           }
         };
+        document.addEventListener('touchstart', _activateAudioContext);
         document.addEventListener('touchend', _activateAudioContext);
         document.addEventListener('mousedown', _activateAudioContext);
         document.addEventListener('keydown', _activateAudioContext);
@@ -2409,8 +2414,10 @@
   }
 
   function _statechange(p, a) {
-    if (p.onstatechange) p.onstatechange(new MIDIConnectionEvent(p, p));
-    if (a.onstatechange) a.onstatechange(new MIDIConnectionEvent(p, a));
+    if (p) {
+      if (p.onstatechange) p.onstatechange(new MIDIConnectionEvent(p, p));
+      if (a.onstatechange) a.onstatechange(new MIDIConnectionEvent(p, a));
+    }
   }
 
   function MIDIInput(a, p) {
@@ -2533,7 +2540,7 @@
           }).and(function() {
             self.proxy = this;
             self.proxy.connect(self.onmidi);
-            for (i = 0; i < self.pending; i++) self.pending[i][0]();
+            for (i = 0; i < self.pending.length; i++) self.pending[i][0]();
             self.pending = [];
           });
         }
@@ -3250,6 +3257,11 @@
   };
   Player.prototype.onPlay = function() {};
   Player.prototype.onResume = function() {};
+  Player.prototype._resume = function() {
+    var self = this;
+    this._player.resume();
+    this._moving = setInterval(function() { self._move(); }, 100);
+  };
   Player.prototype.play = function() {
     if (this._player) {
       var self = this;
@@ -3261,8 +3273,7 @@
       this._playing = true;
       this._paused = false;
       if (this._out || !this._conn) {
-        this._player.resume();
-        this._moving = setInterval(function() { self._move(); }, 100);
+        this._resume();
       }
       else if (!this._waiting) {
         this._waiting = true;
@@ -3273,9 +3284,11 @@
           self._connect(this);
           self._waiting = false;
           if (self._playing) {
-            self._player.resume();
-            self._moving = setInterval(function() { self._move(); }, 100);
+            self._resume();
           }
+        }).or(function() {
+          self._waiting = false;
+          self._resume();
         });
       }
     }
@@ -3297,13 +3310,11 @@
   Player.prototype.onPause = function() {};
   Player.prototype.pause = function(p) {
     if (this._player) {
-      var self = this;
       if (this._paused) {
         if (typeof p == 'undefined' || p) {
           if (this._out) {
-            this._player.resume();
+            this._resume();
             this.onResume();
-            this._moving = setInterval(function() { self._move(); }, 100);
             this._playing = true;
             this._paused = false;
             this.playBtn.on();
@@ -3605,7 +3616,7 @@
 
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.2.8';
+  var _ver = '1.3.3';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -4327,7 +4338,7 @@
     for (i = 0; i < this._data.length; i++) {
       e = this._data[i];
       if (e.length || e.ff == 1 || e.ff == 5) {
-        for (; j <= i; j++) data.push(e);
+        for (; j <= i; j++) data.push(this._data[j]);
       }
     }
     dt += this._data[i - 1].tt - this._data[j - 1].tt;
@@ -4454,7 +4465,7 @@
   if (!JZZ.synth) JZZ.synth = {};
   if (JZZ.synth.Tiny) return;
 
-  var _version = '1.1.3';
+  var _version = '1.1.5';
 
 function WebAudioTinySynth(opt){
   this.__proto__ = this.sy =
@@ -4468,7 +4479,7 @@ function WebAudioTinySynth(opt){
       debug:      {type:Number, value:0},
       src:        {type:String, value:null, observer:"loadMIDIUrl"},
       loop:       {type:Number, value:0},
-      internalcontext: {type:Number, value:1},
+      //internalcontext: {type:Number, value:1},
       tsmode:     {type:Number, value:0},
       voices:     {type:Number, value:64},
       useReverb:  {type:Number, value:1},
@@ -4850,10 +4861,10 @@ function WebAudioTinySynth(opt){
           }
         }.bind(this),60
       );
-      if(this.internalcontext){
-        window.AudioContext = window.AudioContext || window.webkitAudioContext;
-        this.setAudioContext(new AudioContext());
-      }
+      //if(this.internalcontext){
+      //  window.AudioContext = window.AudioContext || window.webkitAudioContext;
+      //  this.setAudioContext(new AudioContext());
+      //}
       this.isReady=1;
     },
     setMasterVol:function(v){
@@ -5328,6 +5339,7 @@ function WebAudioTinySynth(opt){
       synth = new WebAudioTinySynth();
       _noname.push(synth);
     }
+    synth.setAudioContext(_ac);
     port.plug = function(dest) {
       if (dest && (dest.context instanceof AudioContext || dest.context instanceof webkitAudioContext)) {
         synth.setAudioContext(dest.context, dest);
