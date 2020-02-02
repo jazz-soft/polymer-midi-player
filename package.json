@@ -1,6 +1,6 @@
 {
   "name": "polymer-midi-player",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "MIDI Player Web Component",
   "main": "index.js",
   "scripts": {
@@ -19,12 +19,12 @@
   ],
   "author": "jazz-soft (https://jazz-soft.net/)",
   "dependencies": {
-    "@polymer/polymer": "^3.3.0",
-    "@webcomponents/webcomponentsjs": "^2.3.0",
-    "jzz": "^0.9.3",
-    "jzz-gui-player": "^1.3.1",
-    "jzz-midi-smf": "^1.2.8",
-    "jzz-synth-tiny": "^1.1.3"
+    "@polymer/polymer": "^3.3.1",
+    "@webcomponents/webcomponentsjs": "^2.4.1",
+    "jzz": "^1.0.2",
+    "jzz-gui-player": "^1.3.6",
+    "jzz-midi-smf": "^1.3.3",
+    "jzz-synth-tiny": "^1.1.5"
   },
   "repository": {
     "type": "git",
