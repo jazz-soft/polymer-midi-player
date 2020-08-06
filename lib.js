@@ -13,7 +13,7 @@
 })(this, function() {
 
   var _scope = typeof window === 'undefined' ? global : window;
-  var _version = '1.0.2';
+  var _version = '1.0.9';
   var i, j, k, m, n;
 
   var _time = Date.now || function () { return new Date().getTime(); };
@@ -561,8 +561,8 @@
   }
 
   var _jzz;
-  var _engine = {};
-  var _virtual = { _outs: [], _ins: []};
+  var _engine = { _outs: [], _ins: [] };
+  var _virtual = { _outs: [], _ins: [] };
 
   // Node.js
   function _tryNODE() {
@@ -1056,7 +1056,7 @@
       var plugin = { id: _engine._pool.length };
       _engine._pool.push(plugin);
       if (!plugin.id) plugin.ready = true;
-      else document.dispatchEvent(new CustomEvent('jazz-midi', {detail:['new']}));
+      else document.dispatchEvent(new CustomEvent('jazz-midi', { detail: ['new'] }));
     };
     _engine._newPlugin();
     _engine._refresh = function(client) {
@@ -1237,6 +1237,7 @@
     return _jzz._thenable();
   };
   JZZ.JZZ = JZZ;
+  JZZ.version = _version;
   JZZ.info = function() { return _J.prototype.info(); };
   JZZ.Widget = function(arg) {
     var obj = new _M();
@@ -3105,6 +3106,20 @@
 
     self.rlen = right - left + 10;
 
+    self.lbl = document.createElement('div');
+    self.lbl.style.display = 'inline-block';
+    self.lbl.style.position = 'absolute';
+    self.lbl.style.top = '26px';
+    self.lbl.style.left = left + 'px';
+    self.lbl.style.width = (self.rlen + 10) + 'px';
+    self.lbl.style.height = '12px';
+    self.lbl.style.padding = '0';
+    self.lbl.style.textAlign = 'center';
+    self.lbl.style.color = '#aaa';
+    self.lbl.style.fontSize = '12px';
+    self.lbl.style.fontFamily = 'Arial, Helvetica, sans-serif';
+    self.gui.appendChild(self.lbl);
+
     self.rail = document.createElement('div');
     self.rail.style.display = 'inline-block';
     self.rail.style.position = 'absolute';
@@ -3200,6 +3215,9 @@
   Player.prototype = new JZZ.Widget();
   Player.prototype.constructor = Player;
 
+  Player.prototype.label = function(html) {
+    this.lbl.innerHTML = html;
+  };
   Player.prototype.disable = function() {
     this.playBtn.disable();
     this.pauseBtn.disable();
@@ -3228,8 +3246,13 @@
     this._player.trim();
     this._player.connect(this);
     this._player.onEnd = function() { self._onEnd(); };
+    this._player.filter(this._setfilter);
     this.enable();
     this.onLoad(smf);
+  };
+  Player.prototype.filter = function(f) {
+    this._setfilter = f instanceof Function ? f : undefined;
+    if (this._player) this._player.filter(this._setfilter);
   };
   Player.prototype.onEnd = function() {};
   Player.prototype.onLoad = function() {};
@@ -3310,6 +3333,7 @@
   Player.prototype.onPause = function() {};
   Player.prototype.pause = function(p) {
     if (this._player) {
+      var self = this;
       if (this._paused) {
         if (typeof p == 'undefined' || p) {
           if (this._out) {
@@ -3459,7 +3483,8 @@
     }
   };
   Player.prototype._selected = function() {
-    this.select(this.sel.options[this.sel.selectedIndex].value);
+    var selected = this.sel.options[this.sel.selectedIndex];
+    if (selected) this.select(selected.value);
   };
   Player.prototype._keydown = function(e) {
     if (e.keyCode == 13 || e.keyCode == 32) this._selected();
@@ -3616,7 +3641,7 @@
 
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.3.3';
+  var _ver = '1.3.9';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -4465,7 +4490,7 @@
   if (!JZZ.synth) JZZ.synth = {};
   if (JZZ.synth.Tiny) return;
 
-  var _version = '1.1.5';
+  var _version = '1.2.0';
 
 function WebAudioTinySynth(opt){
   this.__proto__ = this.sy =
@@ -4989,8 +5014,10 @@ function WebAudioTinySynth(opt){
           o[i].playbackRate.value=fp[i]/440;
           if(pn.p!=1)
             this._setParamTarget(o[i].playbackRate,fp[i]/440*pn.p,t,pn.q);
-          this.chmod[ch].connect(o[i].detune);
-          o[i].detune.value=this.bend[ch];
+          if (o[i].detune) {
+            this.chmod[ch].connect(o[i].detune);
+            o[i].detune.value=this.bend[ch];
+          }
           break;
         default:
           o[i]=this.actx.createOscillator();
@@ -5001,8 +5028,10 @@ function WebAudioTinySynth(opt){
             o[i].setPeriodicWave(this.wave[pn.w]);
           else
             o[i].type=pn.w;
-          this.chmod[ch].connect(o[i].detune);
-          o[i].detune.value=this.bend[ch];
+          if (o[i].detune) {
+            this.chmod[ch].connect(o[i].detune);
+            o[i].detune.value=this.bend[ch];
+          }
           break;
         }
         g[i]=this.actx.createGain();
@@ -5022,7 +5051,7 @@ function WebAudioTinySynth(opt){
         o[i].start(t);
         if(this.rhythm[ch]){
           // difference between '()=>' and 'function()': need to pack parameters
-          o[i].onended = function(a, b) { return function() { a.disconnect(b); }; }(this.chmod[ch], o[i].detune);
+          o[i].onended = function(a, b) { return function() { if (b) a.disconnect(b); }; }(this.chmod[ch], o[i].detune);
           o[i].stop(t+p[0].d*this.releaseRatio);
         }
       }
@@ -5109,7 +5138,7 @@ function WebAudioTinySynth(opt){
         if(nt.ch==ch){
           for(var k=nt.o.length-1;k>=0;--k){
             if(nt.o[k].frequency)
-              nt.o[k].detune.setValueAtTime(this.bend[ch],t);
+              if (nt.o[k].detune) nt.o[k].detune.setValueAtTime(this.bend[ch],t);
           }
         }
       }
@@ -5290,8 +5319,6 @@ function WebAudioTinySynth(opt){
       }
       this.setReverbLev();
       this.reset();
-      this.send([0x90,60,1]);
-      this.send([0x90,60,0]);
     },
   }
 /* webaudio-tinysynth coreobject */
