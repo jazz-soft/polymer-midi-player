@@ -13,7 +13,7 @@
 })(this, function() {
 
   var _scope = typeof window === 'undefined' ? global : window;
-  var _version = '1.0.9';
+  var _version = '1.1.6';
   var i, j, k, m, n;
 
   var _time = Date.now || function () { return new Date().getTime(); };
@@ -1246,6 +1246,42 @@
     return obj;
   };
   _J.prototype.Widget = JZZ.Widget;
+  JZZ.addMidiIn = function(name, widget) {
+    var info = _clone(widget._info || {});
+    info.name = name;
+    info.type = info.type || 'javascript';
+    info.manufacturer = info.manufacturer || 'virtual';
+    info.version = info.version || '0.0';
+    var engine = {
+      _info: function() { return info; },
+      _openIn: function(port) {
+        port._pause();
+        port._info = _clone(info);
+        port._close = function() { widget.disconnect(port); };
+        widget.connect(port);
+        port._resume();
+      }
+    };
+    return JZZ.lib.registerMidiIn(name, engine);
+  };
+  JZZ.addMidiOut = function(name, widget) {
+    var info = _clone(widget._info || {});
+    info.name = name;
+    info.type = info.type || 'javascript';
+    info.manufacturer = info.manufacturer || 'virtual';
+    info.version = info.version || '0.0';
+    var engine = {
+      _info: function() { return info; },
+      _openOut: function(port) {
+        port._pause();
+        port._info = _clone(info);
+        port._close = function() { port.disconnect(); };
+        _connect.apply(port, [widget]);
+        port._resume();
+      }
+    };
+    return JZZ.lib.registerMidiOut(name, engine);
+  };
 
   // JZZ.SMPTE
 
@@ -1495,6 +1531,7 @@
     if (typeof a == 'undefined') a = 440.0;
     return (a * Math.pow(2, (_7b(MIDI.noteValue(n), n) - 69.0) / 12.0));
   };
+  MIDI.to14b = function(x) { return x <= 0 ? 0 : x >= 1 ? 0x3fff : Math.floor(x * 0x4000); };
 
   var _noteMap = { c:0, d:2, e:4, f:5, g:7, a:9, b:11, h:11 };
   for (k in _noteMap) {
@@ -1522,7 +1559,8 @@
     control: function(c, n, v) { return [0xB0 + _ch(c), _7b(n), _7b(v)]; },
     program: function(c, n) { return [0xC0 + _ch(c), _7b(MIDI.programValue(n), n)]; },
     pressure: function(c, n) { return [0xD0 + _ch(c), _7b(n)]; },
-    pitchBend: function(c, n) { return [0xE0 + _ch(c), _lsb(n), _msb(n)]; },
+    pitchBend: function(c, n, l) { return typeof l == 'undefined' ? [0xE0 + _ch(c), _lsb(n), _msb(n)] : [0xE0 + _ch(c), _7b(l), _7b(n)]; },
+    pitchBendF: function(c, x) { return _helperCH.pitchBend(c, MIDI.to14b((x + 1) / 2)); },
     bankMSB: function(c, n) { return [0xB0 + _ch(c), 0x00, _7b(n)]; },
     bankLSB: function(c, n) { return [0xB0 + _ch(c), 0x20, _7b(n)]; },
     modMSB: function(c, n) { return [0xB0 + _ch(c), 0x01, _7b(n)]; },
@@ -1533,6 +1571,8 @@
     footLSB: function(c, n) { return [0xB0 + _ch(c), 0x24, _7b(n)]; },
     portamentoMSB: function(c, n) { return [0xB0 + _ch(c), 0x05, _7b(n)]; },
     portamentoLSB: function(c, n) { return [0xB0 + _ch(c), 0x25, _7b(n)]; },
+    dataMSB: function(c, n) { return [0xB0 + _ch(c), 0x06, _7b(n)]; },
+    dataLSB: function(c, n) { return [0xB0 + _ch(c), 0x26, _7b(n)]; },
     volumeMSB: function(c, n) { return [0xB0 + _ch(c), 0x07, _7b(n)]; },
     volumeLSB: function(c, n) { return [0xB0 + _ch(c), 0x27, _7b(n)]; },
     balanceMSB: function(c, n) { return [0xB0 + _ch(c), 0x08, _7b(n)]; },
@@ -1545,12 +1585,18 @@
     portamento: function(c, b) { return [0xB0 + _ch(c), 0x41, b ? 127 : 0]; },
     sostenuto: function(c, b) { return [0xB0 + _ch(c), 0x42, b ? 127 : 0]; },
     soft: function(c, b) { return [0xB0 + _ch(c), 0x43, b ? 127 : 0]; },
+    dataIncr: function(c) { return [0xB0 + _ch(c), 0x60, 0]; },
+    dataDecr: function(c) { return [0xB0 + _ch(c), 0x61, 0]; },
+    nrpnLSB: function(c, n) { return [0xB0 + _ch(c), 0x62, _7b(n)]; },
+    nrpnMSB: function(c, n) { return [0xB0 + _ch(c), 0x63, _7b(n)]; },
+    rpnLSB: function(c, n) { return [0xB0 + _ch(c), 0x64, _7b(n)]; },
+    rpnMSB: function(c, n) { return [0xB0 + _ch(c), 0x65, _7b(n)]; },
     allSoundOff: function(c) { return [0xB0 + _ch(c), 0x78, 0]; },
     allNotesOff: function(c) { return [0xB0 + _ch(c), 0x7b, 0]; },
   };
   var _helperNC = { // no channel
     mtc: function(t) { return [0xF1, _mtc(t)]; },
-    songPosition: function(n) { return [0xF2, _lsb(n), _msb(n)]; },
+    songPosition: function(n, l) { return typeof l == 'undefined' ? [0xF2, _lsb(n), _msb(n)] : [0xF2, _7b(l), _7b(n)]; },
     songSelect: function(n) { return [0xF3, _7b(n)]; },
     tune: function() { return [0xF6]; },
     clock: function() { return [0xF8]; },
@@ -1561,6 +1607,41 @@
     sxIdRequest: function() { return [0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]; },
     sxFullFrame: function(t) { return [0xF0, 0x7F, 0x7F, 0x01, 0x01, _hrtype(t), t.getMinute(), t.getSecond(), t.getFrame(), 0xF7]; },
     reset: function() { return [0xFF]; },
+  };
+  var _helperG = { // compound messages
+    bank: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.bankMSB(c, _msb(m)), _helperCH.bankLSB(c, _lsb(m))] : [_helperCH.bankMSB(c, m), _helperCH.bankLSB(c, l)]; },
+    modF: function(c, x) { return _helperG.mod(c, MIDI.to14b(x)); },
+    mod: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.modMSB(c, _msb(m)), _helperCH.modLSB(c, _lsb(m))] : [_helperCH.modMSB(c, m), _helperCH.modLSB(c, l)]; },
+    breathF: function(c, x) { return _helperG.breath(c, MIDI.to14b(x)); },
+    breath: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.breathMSB(c, _msb(m)), _helperCH.breathLSB(c, _lsb(m))] : [_helperCH.breathMSB(c, m), _helperCH.breathLSB(c, l)]; },
+    footF: function(c, x) { return _helperG.foot(c, MIDI.to14b(x)); },
+    foot: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.footMSB(c, _msb(m)), _helperCH.footLSB(c, _lsb(m))] : [_helperCH.footMSB(c, m), _helperCH.footLSB(c, l)]; },
+    portamentoTimeF: function(c, x) { return _helperG.portamentoTime(c, MIDI.to14b(x)); },
+    portamentoTime: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.portamentoMSB(c, _msb(m)), _helperCH.portamentoLSB(c, _lsb(m))] : [_helperCH.portamentoMSB(c, m), _helperCH.portamentoLSB(c, l)]; },
+    dataF: function(c, x) { return _helperG.data(c, MIDI.to14b(x)); },
+    data: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.dataMSB(c, _msb(m)), _helperCH.dataLSB(c, _lsb(m))] : [_helperCH.dataMSB(c, m), _helperCH.dataLSB(c, l)]; },
+    volumeF: function(c, x) { return _helperG.volume(c, MIDI.to14b(x)); },
+    volume: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.volumeMSB(c, _msb(m)), _helperCH.volumeLSB(c, _lsb(m))] : [_helperCH.volumeMSB(c, m), _helperCH.volumeLSB(c, l)]; },
+    balanceF: function(c, x) { return _helperG.balance(c, MIDI.to14b((x + 1) / 2)); },
+    balance: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.balanceMSB(c, _msb(m)), _helperCH.balanceLSB(c, _lsb(m))] : [_helperCH.balanceMSB(c, m), _helperCH.balanceLSB(c, l)]; },
+    panF: function(c, x) { return _helperG.pan(c, MIDI.to14b((x + 1) / 2)); },
+    pan: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.panMSB(c, _msb(m)), _helperCH.panLSB(c, _lsb(m))] : [_helperCH.panMSB(c, m), _helperCH.panLSB(c, l)]; },
+    expressionF: function(c, x) { return _helperG.expression(c, MIDI.to14b(x)); },
+    expression: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.expressionMSB(c, _msb(m)), _helperCH.expressionLSB(c, _lsb(m))] : [_helperCH.expressionMSB(c, m), _helperCH.expressionLSB(c, l)]; },
+    nrpn: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.nrpnMSB(c, _msb(m)), _helperCH.nrpnLSB(c, _lsb(m))] : [_helperCH.nrpnMSB(c, m), _helperCH.nrpnLSB(c, l)]; },
+    rpn: function(c, m, l) { return typeof l == 'undefined' ?
+      [_helperCH.rpnMSB(c, _msb(m)), _helperCH.rpnLSB(c, _lsb(m))] : [_helperCH.rpnMSB(c, m), _helperCH.rpnLSB(c, l)]; },
   };
   function _smf(ff, dd) {
     var midi = new MIDI();
@@ -1696,11 +1777,27 @@
   };
 
   function _copyPortHelper(M, name, func) {
-    M.prototype[name] = function() { this.send(func.apply(0, arguments)); return this; };
+    M.prototype[name] = function() { return this.send(func.apply(0, arguments)); };
+  }
+  function _copyPortHelperG(M, name, func) {
+    M.prototype[name] = function() {
+      var a = func.apply(0, arguments);
+      var g = this;
+      for (var i = 0; i < a.length; i++) g = g.send(a[i]);
+      return g;
+    };
   }
   function _copyChannelHelper(C, name, func) {
     C.prototype[name] = function() {
-      this.send(func.apply(0, [this._chan].concat(Array.prototype.slice.call(arguments)))); return this;
+      return this.send(func.apply(0, [this._chan].concat(Array.prototype.slice.call(arguments))));
+    };
+  }
+  function _copyChannelHelperG(C, name, func) {
+    C.prototype[name] = function() {
+      var a = func.apply(0, [this._chan].concat(Array.prototype.slice.call(arguments)));
+      var g = this;
+      for (var i = 0; i < a.length; i++) g = g.send(a[i]);
+      return g;
     };
   }
   function _copyHelperNC(name, func) {
@@ -1708,6 +1805,15 @@
   }
   function _copyHelperSMF(name, func) {
     MIDI[name] = function() { return func.apply(0, arguments); };
+  }
+  function _copyHelperG(name, func) {
+    MIDI[name] = function() {
+      var i;
+      var g = [];
+      var a = func.apply(0, arguments);
+      for (i = 0; i < a.length; i++) g.push(new MIDI(a[i]));
+      return g;
+    };
   }
   function _copyHelperCH(name, func) {
     _copyHelperNC(name, func);
@@ -1728,11 +1834,16 @@
   for (k in _helperNC) if (_helperNC.hasOwnProperty(k)) _copyHelperNC(k, _helperNC[k]);
   for (k in _helperSMF) if (_helperSMF.hasOwnProperty(k)) _copyHelperSMF(k, _helperSMF[k]);
   for (k in _helperCH) if (_helperCH.hasOwnProperty(k)) _copyHelperCH(k, _helperCH[k]);
+  for (k in _helperG) if (_helperG.hasOwnProperty(k)) _copyHelperG(k, _helperG[k]);
   function _copyMidiHelpers(M, C) {
     for (k in _helperNC) if (_helperNC.hasOwnProperty(k)) _copyPortHelper(M, k, _helperNC[k]);
     for (k in _helperSMF) if (_helperSMF.hasOwnProperty(k)) _copyPortHelper(M, k, _helperSMF[k]);
     for (k in _helperCH) if (_helperCH.hasOwnProperty(k)) _copyPortHelper(M, k, _helperCH[k]);
-    if (C) for (k in _helperCH) if (_helperCH.hasOwnProperty(k)) _copyChannelHelper(C, k, _helperCH[k]);
+    for (k in _helperG) if (_helperG.hasOwnProperty(k)) _copyPortHelperG(M, k, _helperG[k]);
+    if (C) {
+      for (k in _helperCH) if (_helperCH.hasOwnProperty(k)) _copyChannelHelper(C, k, _helperCH[k]);
+      for (k in _helperG) if (_helperG.hasOwnProperty(k)) _copyChannelHelperG(C, k, _helperG[k]);
+    }
   }
   _copyMidiHelpers(_M, _C);
 
@@ -2440,7 +2551,7 @@
       set: function(value) {
         if (value instanceof Function) {
           _onmsg = value;
-          if (!_open) self.open();
+          if (!_open) try { self.open(); } catch(e) {/**/}
         }
         else _onmsg = null;
       },
@@ -3185,6 +3296,7 @@
     arg.ports.push(undefined);
     this._ports = arg.ports;
     this._conn = arg.connect;
+    this.disable();
 
     if (typeof arg.at == 'string') {
       try {
@@ -3224,6 +3336,7 @@
     this.stopBtn.disable();
     this.loopBtn.disable();
     this.midiBtn.disable();
+    if (this._conn) this.midiBtn.off();
     this.fileBtn.off();
     this.rail.style.borderColor = '#aaa';
     this.rail.style.backgroundColor = '#888';
@@ -3437,7 +3550,7 @@
     this._more = false;
   };
   Player.prototype.settings = function() {
-    if (!this._player || this._more || !this._conn) return;
+    if (this._more || !this._conn) return;
     var self = this;
     this._more = true;
     this.midiBtn.on();
@@ -3607,7 +3720,7 @@
   Player.prototype.connect = function(port) {
     if (port == this) {
       this._conn = true;
-      if (this._player) this.midiBtn.off();
+      this.midiBtn.off();
     }
     else {
       this._connect(port);
@@ -3617,12 +3730,14 @@
     if (port == this) {
       this._conn = false;
       if (this._out) this._disconnect(this._out);
-      if (this._player) this.midiBtn.disable();
+      this._outname = undefined;
+      this.midiBtn.disable();
     }
     else {
       this._disconnect(port);
     }
   };
+  Player.prototype.connected = function() { return this._outname; };
 
   JZZ.gui.Player = Player;
 });
@@ -3641,7 +3756,7 @@
 
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.4.0';
+  var _ver = '1.4.2';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -3789,15 +3904,22 @@
     if (p > s.length) this._complain(off + s.length, 'Incomplete data', p - s.length);
   };
 
-  function _copy(obj) {
-    var ret = {};
-    for (var k in obj) if (obj.hasOwnProperty(k)) ret[k] = obj[k];
-    return ret;
+  function Warn(obj) {
+    if (!(this instanceof Warn)) return new Warn(obj);
+    for (var k in obj) if (obj.hasOwnProperty(k)) this[k] = obj[k];
   }
+  Warn.prototype.toString = function() {
+    var a = [];
+    if (typeof this.off != 'undefined') a.push('offset ' + this.off);
+    if (typeof this.track != 'undefined') a.push('track ' + this.track);
+    if (typeof this.tick != 'undefined') a.push('tick ' + this.tick);
+    return a.join(' ') + ' -- ' + this.msg + ' (' + this.data + ')';
+  };
+
   SMF.prototype.validate = function() {
     var i, k;
     var w = [];
-    if (this._warn) for (i = 0; i < this._warn.length; i++) w.push(_copy(this._warn[i]));
+    if (this._warn) for (i = 0; i < this._warn.length; i++) w.push(Warn(this._warn[i]));
     k = 0;
     for (i = 0; i < this.length; i++) if (this[i] instanceof MTrk) {
       k++;
@@ -4100,7 +4222,7 @@
   MTrk.prototype._validate = function(w, k, tr) {
     var i, z;
     if (this._warn) for (i = 0; i < this._warn.length; i++) {
-      z = _copy(this._warn[i]);
+      z = Warn(this._warn[i]);
       z.track = k;
       w.push(z);
     }
@@ -4108,7 +4230,7 @@
       z = _validate_midi(this[i], tr);
       if (z) {
         z.track = k;
-        w.push(z);
+        w.push(Warn(z));
       }
     }
   };
@@ -4152,33 +4274,6 @@
     }
     return a.join('\n  ');
   };
-  function _eventOrder(msg) {
-    var x = {
-      0x00: 0,
-      0x03: 1,
-      0x02: 2,
-      0x54: 3,
-      0x51: 4,
-      0x58: 5,
-      0x59: 6,
-      0x20: 7,
-      0x21: 7,
-      0x06: 8,
-      0x04: 9,
-      0x01: 16,
-      0x05: 16,
-      0x7f: 17,
-      0x2f: 20
-    }[msg.ff];
-    if (typeof x !== 'undefined') return x;
-    if (msg.length) {
-      var s = msg[0] >> 4;
-      x = { 8: 10, 15: 11, 11: 12, 12: 13, 10: 15, 13: 15, 14: 15 }[s];
-      if (typeof x !== 'undefined') return x;
-      if (s == 9) return msg[1] ? 14 : 10;
-    }
-    return 18;
-  }
 
   MTrk.prototype.add = function(t, msg) {
     t = parseInt(t);
@@ -4187,17 +4282,15 @@
     msg.tt = t;
     if (this[this.length - 1].tt < t) this[this.length - 1].tt = t; // end of track
     if (msg.ff == 0x2f || msg[0] == 0xff) return this;
-    var x = _eventOrder(msg);
     var i;
-    for (i = 0; i < this.length; i++) {
+    for (i = 0; i < this.length - 1; i++) {
       if (this[i].tt > t) break;
-      if (this[i].tt == t && _eventOrder(this[i]) > x) break;
     }
     this.splice(i, 0, msg);
     return this;
   };
 
-  MTrk.prototype.send = function(msg) { this._orig.add(this._tick, msg); };
+  MTrk.prototype.send = function(msg) { this._orig.add(this._tick, msg); return this; };
   MTrk.prototype.tick = function(t) {
     if (t != parseInt(t) || t < 0) throw RangeError('Bad tick value: ' + t);
     if (!t) return this;
@@ -4495,7 +4588,7 @@
   if (!JZZ.synth) JZZ.synth = {};
   if (JZZ.synth.Tiny) return;
 
-  var _version = '1.2.0';
+  var _version = '1.2.3';
 
 function WebAudioTinySynth(opt){
   this.__proto__ = this.sy =
@@ -4838,10 +4931,12 @@ function WebAudioTinySynth(opt){
       var i;
       this.pg=[]; this.vol=[]; this.ex=[]; this.bend=[]; this.rpnidx=[]; this.brange=[];
       this.sustain=[]; this.notetab=[]; this.rhythm=[];
+      this.masterTuningC=0; this.masterTuningF=0; this.tuningC=[]; this.tuningF=[];
       this.maxTick=0, this.playTick=0, this.playing=0; this.releaseRatio=3.5;
       for(var i=0;i<16;++i){
         this.pg[i]=0; this.vol[i]=3*100*100/(127*127);
         this.bend[i]=0; this.brange[i]=0x100;
+        this.tuningC[i]=0; this.tuningF[i]=0;
         this.rhythm[i]=0;
       }
       this.rhythm[9]=1;
@@ -4926,7 +5021,11 @@ function WebAudioTinySynth(opt){
         this.resetAllControllers(i);
         this.allSoundOff(i);
         this.rhythm[i]=0;
+        this.tuningC[i]=0;
+        this.tuningF[i]=0;
       }
+      this.masterTuningC=0;
+      this.masterTuningF=0;
       this.rhythm[9]=1;
     },
     setQuality:function(q){
@@ -4998,7 +5097,7 @@ function WebAudioTinySynth(opt){
     _note:function(t,ch,n,v,p){
       var out,sc,pn;
       var o=[],g=[],vp=[],fp=[],r=[];
-      var f=440*Math.pow(2,(n-69)/12);
+      var f=440*Math.pow(2,(n-69 + this.masterTuningC + this.tuningC[ch] + (this.masterTuningF + this.tuningF[ch])/8192)/12);
       this._limitVoices(ch,n);
       for(var i=0;i<p.length;++i){
         pn=p[i];
@@ -5205,16 +5304,32 @@ function WebAudioTinySynth(opt){
         case 10: this.setPan(ch,msg[2],t); break;
         case 11: this.setExpression(ch,msg[2],t); break;
         case 64: this.setSustain(ch,msg[2],t); break;
-        case 98:  case 98: this.rpnidx[ch]=0x3fff; break; /* nrpn lsb/msb */
-        case 100: this.rpnidx[ch]=(this.rpnidx[ch]&0x380)|msg[2]; break; /* rpn lsb */
+        case 98:  case 99: this.rpnidx[ch]=0x3fff; break; /* nrpn lsb/msb */
+        case 100: this.rpnidx[ch]=(this.rpnidx[ch]&0x3f80)|msg[2]; break; /* rpn lsb */
         case 101: this.rpnidx[ch]=(this.rpnidx[ch]&0x7f)|(msg[2]<<7); break; /* rpn msb */
         case 6:  /* data entry msb */
-          if(this.rpnidx[ch]==0)
-            this.brange[ch]=(msg[2]<<7)+(this.brange[ch]&0x7f);
+          switch (this.rpnidx[ch]) {
+            case 0:
+              this.brange[ch]=(msg[2]<<7)+(this.brange[ch]&0x7f);
+              break;
+            case 1:
+              this.tuningF[ch]=(msg[2]<<7)+((this.tuningF[ch]+0x2000)&0x7f)-0x2000;
+              break;
+            case 2:
+              this.tuningC[ch]=msg[2]-0x40;
+              break;
+          }
           break;
         case 38:  /* data entry lsb */
-          if(this.rpnidx[ch]==0)
-            this.brange[ch]=(this.brange[ch]&0x380)|msg[2];
+          switch (this.rpnidx[ch]) {
+            case 0:
+              this.brange[ch]=(this.brange[ch]&0x3f80)|msg[2];
+              break;
+            case 1:
+              this.tuningF[ch]=((this.tuningF[ch]+0x2000)&0x3f80)|msg[2]-0x2000;
+              break;
+            case 2: break;
+          }
           break;
         case 120:  /* all sound off */
         case 123:  /* all notes off */
@@ -5238,10 +5353,20 @@ function WebAudioTinySynth(opt){
           for(var ii=0;ii<msg.length;++ii)
             ds.push(msg[ii].toString(16));
         }
-        if(msg[1]==0x41&&msg[2]==0x10&&msg[3]==0x42&&msg[4]==0x12&&msg[5]==0x40){
-          if((msg[6]&0xf0)==0x10&&msg[7]==0x15){
-            var ch=[9,0,1,2,3,4,5,6,7,8,10,11,12,13,14,15][msg[6]&0xf];
-            this.rhythm[ch]=msg[8];
+        if (msg[0]==0xf0) {
+          if (msg[1]==0x7f && msg[3]==4) {
+            if (msg[4]==3 && msg.length >= 8) { // Master Fine Tuning
+              this.masterTuningF = msg[6]*0x80 + msg[5] - 8192;
+            }
+            if (msg[4]==4 && msg.length >= 8) { // Master Coarse Tuning
+              this.masterTuningC = msg[6]-0x40;
+            }
+          }
+          if(msg[1]==0x41&&msg[3]==0x42&&msg[4]==0x12&&msg[5]==0x40){
+            if((msg[6]&0xf0)==0x10&&msg[7]==0x15){
+              var c=[9,0,1,2,3,4,5,6,7,8,10,11,12,13,14,15][msg[6]&0xf];
+              this.rhythm[c]=msg[8];
+            }
           }
         }
         break;
