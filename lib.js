@@ -1,4 +1,5 @@
 (function(global, factory) {
+  /* istanbul ignore next */
   if (typeof exports === 'object' && typeof module !== 'undefined') {
     module.exports = factory();
   }
@@ -13,7 +14,7 @@
 })(this, function() {
 
   var _scope = typeof window === 'undefined' ? global : window;
-  var _version = '1.1.6';
+  var _version = '1.3.4';
   var i, j, k, m, n;
 
   var _time = Date.now || function () { return new Date().getTime(); };
@@ -23,6 +24,8 @@
   var _schedule = function(f) {
     setTimeout(f, 0);
   };
+  function _nop() {}
+  function _func(f) { return typeof f == 'function'; }
 
   // _R: common root for all async objects
   function _R() {
@@ -46,14 +49,17 @@
   _R.prototype._crash = function(err) { this._break(err); this._resume(); };
   _R.prototype._err = function() { return this._log[this._log.length - 1]; };
   _R.prototype.log = function() { return _clone(this._log); };
-  _R.prototype._image = function() {
-    var F = function() {}; F.prototype = this._orig;
+  _R.prototype._dup = function() {
+    var F = function() {};
+    F.prototype = this._orig;
     var ret = new F();
     ret._ready = false;
     ret._queue = [];
     return ret;
   };
+  _R.prototype._image = function() { return this._dup(); };
   _R.prototype._thenable = function() {
+    if (this.then) return this;
     var self = this;
     var F = function() {}; F.prototype = self;
     var ret = new F();
@@ -62,10 +68,10 @@
   };
   function _then(good, bad) {
     if (this._bad) {
-      if (bad instanceof Function) bad.apply(this, [new Error(this._err())]);
+      if (_func(bad)) bad.apply(this, [new Error(this._err())]);
     }
     else {
-      if (good instanceof Function) good.apply(this, [this]);
+      if (_func(good)) good.apply(this, [this]);
     }
   }
   function _wait(obj, delay) {
@@ -89,13 +95,13 @@
   }
   function _and(q) {
     if (!this._bad) {
-      if (q instanceof Function) q.apply(this); else console.log(q);
+      if (_func(q)) q.apply(this); else console.log(q);
     }
   }
   _R.prototype.and = function(func) { this._push(_and, [func]); return this._thenable(); };
   function _or(q) {
     if (this._bad) {
-      if (q instanceof Function) q.apply(this); else console.log(q);
+      if (_func(q)) q.apply(this); else console.log(q);
     }
   }
   _R.prototype.or = function(func) { this._push(_or, [func]); return this._thenable(); };
@@ -159,6 +165,9 @@
   }
   _J.prototype = new _R();
 
+  function _for(x, f) {
+    for(var k in x) if (x.hasOwnProperty(k)) f.call(this, k);
+  }
   function _clone(obj, key, val) {
     if (typeof key == 'undefined') return _clone(obj, [], []);
     if (obj instanceof Object) {
@@ -166,7 +175,7 @@
       var ret;
       if (obj instanceof Array) ret = []; else ret = {};
       key.push(obj); val.push(ret);
-      for(var k in obj) if (obj.hasOwnProperty(k)) ret[k] = _clone(obj[k], key, val);
+      _for(obj, function(k) { ret[k] = _clone(obj[k], key, val); });
       return ret;
     }
     return obj;
@@ -264,7 +273,7 @@
 
   function _filterList(q, arr) {
     var i, n;
-    if (q instanceof Function) q = q(arr);
+    if (_func(q)) q = q(arr);
     if (!(q instanceof Array)) q = [q];
     var before = [];
     var after = [];
@@ -394,7 +403,12 @@
   };
   _M.prototype.note = function(c, n, v, t) {
     this.noteOn(c, n, v);
-    if (t > 0) this.wait(t).noteOff(c, n);
+    if (typeof this._ch == 'undefined' && typeof this._master == 'undefined') {
+      if (t > 0) this.wait(t).noteOff(c, n);
+    }
+    else {
+      if (v > 0) this.wait(v).noteOff(c);
+    }
     return this._thenable();
   };
   _M.prototype._emit = function(msg) {
@@ -411,7 +425,7 @@
     return this._thenable();
   };
   function _connect(arg) {
-    if (arg instanceof Function) _push(this._orig._handles, arg);
+    if (_func(arg)) _push(this._orig._handles, arg);
     else _push(this._orig._outs, arg);
   }
   function _disconnect(arg) {
@@ -419,7 +433,7 @@
       this._orig._handles = [];
       this._orig._outs = [];
     }
-    else if (arg instanceof Function) _pop(this._orig._handles, arg);
+    else if (_func(arg)) _pop(this._orig._handles, arg);
     else _pop(this._orig._outs, arg);
   }
   _M.prototype.connect = function(arg) {
@@ -433,70 +447,59 @@
   _M.prototype.connected = function() {
     return this._orig._handles.length + this._orig._outs.length;
   };
-  _M.prototype.ch = function(n) {
-    if (typeof n == 'undefined') return this;
-    _validateChannel(n);
-    var chan = new _C(this, n);
-    this._push(_kick, [chan]);
-    return chan._thenable();
+  _M.prototype._image = function() {
+    var dup = this._dup();
+    dup._ch = this._ch;
+    dup._sxid = this._sxid;
+    dup._master = this._master;
+    dup._band = this._band;
+    return dup;
   };
+  _M.prototype._ch = undefined;
+  _M.prototype._sxid = 0x7f;
+  _M.prototype._master = undefined;
+  _M.prototype._band = undefined;
+
+  _M.prototype.sxId = function(id) {
+    if (typeof id == 'undefined') id = _M.prototype._sxid;
+    if (id == this._sxid) return this._thenable();
+    id = _7b(id);
+    var img = this._image();
+    img._sxid = id;
+    this._push(_kick, [img]);
+    return img._thenable();
+  };
+  _M.prototype.ch = function(c) {
+    if (c == this._ch || typeof c == 'undefined' && typeof this._ch == 'undefined') return this._thenable();
+    var img = this._image();
+    if (typeof c != 'undefined') c = _ch(c);
+    img._ch = c;
+    img._master = undefined;
+    img._band = undefined;
+    this._push(_kick, [img]);
+    return img._thenable();
+  };
+
   function _mpe(m, n) {
     if (!this._orig._mpe) this._orig._mpe = new MPE();
     this._orig._mpe.setup(m, n);
   }
   _M.prototype.mpe = function(m, n) {
-    if (typeof m == 'undefined' && typeof n == 'undefined') return this;
-    MPE.validate(m, n);
-    var chan = n ? new _E(this, m, n) : new _C(this, m);
+    if (m == this._master && n == this._band || typeof m == 'undefined' && typeof this._master == 'undefined') return this._thenable();
+    if (typeof m != 'undefined') MPE.validate(m, n);
+    if (!n) return this.ch(m);
+    var img = this._image();
+    img._ch = undefined;
+    img._master = m;
+    img._band = n;
     this._push(_mpe, [m, n]);
-    this._push(_kick, [chan]);
-    return chan._thenable();
+    this._push(_kick, [img]);
+    return img._thenable();
   };
   function _validateChannel(c) {
     if (c != parseInt(c) || c < 0 || c > 15)
       throw RangeError('Bad channel value (must not be less than 0 or more than 15): ' + c);
   }
-
-  // _C: MIDI Channel object
-  function _C(port, chan) {
-    _M.apply(this);
-    this._port = port._orig;
-    this._chan = chan;
-    _rechain(this, this._port, 'ch');
-    _rechain(this, this._port, 'mpe');
-    _rechain(this, this._port, 'connect');
-    _rechain(this, this._port, 'disconnect');
-    _rechain(this, this._port, 'close');
-  }
-  _C.prototype = new _M();
-  _C.prototype.channel = function() { return this._chan; };
-  _C.prototype._receive = function(msg) { this._port._receive(msg); };
-  _C.prototype.note = function(n, v, t) {
-    this.noteOn(n, v);
-    if (t) this.wait(t).noteOff(n);
-    return this._thenable();
-  };
-
-  // _E: MPE Channel object
-  function _E(port, m, n) {
-    _M.apply(this);
-    this._port = port._orig;
-    this._master = m;
-    this._band = n;
-    _rechain(this, this._port, 'ch');
-    _rechain(this, this._port, 'mpe');
-    _rechain(this, this._port, 'connect');
-    _rechain(this, this._port, 'disconnect');
-    _rechain(this, this._port, 'close');
-  }
-  _E.prototype = new _M();
-  _E.prototype.channel = function() { return this._master; };
-  _E.prototype._receive = function(msg) { this._port._receive(msg); };
-  _E.prototype.note = function(n, v, t) {
-    this.noteOn(n, v);
-    if (t) this.wait(t).noteOff(n);
-    return this._thenable();
-  };
 
   // _W: Watcher object ~ MIDIAccess.onstatechange
   function _W() {
@@ -510,7 +513,7 @@
   }
   _W.prototype = new _R();
   function _connectW(arg) {
-    if (arg instanceof Function) {
+    if (_func(arg)) {
       if (!this._orig._handles.length) _engine._watch();
       _push(this._orig._handles, arg);
     }
@@ -583,6 +586,7 @@
     obj.classid = 'CLSID:1ACE1618-1C7D-4561-AEE1-34842AA85E90';
     obj.type = 'audio/x-jazz';
     document.body.appendChild(obj);
+    /* istanbul ignore next */
     if (obj.isJazz) {
       _initJazzPlugin(obj);
       return;
@@ -593,15 +597,18 @@
   // Web MIDI API
   var _navigator;
   var _requestMIDIAccess;
-  if (typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
-    _navigator = navigator;
-    _requestMIDIAccess = navigator.requestMIDIAccess;
-    try {
-      if (_requestMIDIAccess.toString().indexOf('JZZ(') != -1) _requestMIDIAccess = undefined;
+  function _findMidiAccess() {
+    if (typeof navigator !== 'undefined' && navigator.requestMIDIAccess) {
+      _navigator = navigator;
+      _requestMIDIAccess = navigator.requestMIDIAccess;
+      try {
+        if (_requestMIDIAccess.toString().indexOf('JZZ(') != -1) _requestMIDIAccess = undefined;
+      }
+      catch (err) {}
     }
-    catch (err) {}
   }
   function _tryWebMIDI() {
+    _findMidiAccess();
     if (_requestMIDIAccess) {
       var self = this;
       var onGood = function(midi) {
@@ -619,6 +626,7 @@
     this._break();
   }
   function _tryWebMIDIsysex() {
+    _findMidiAccess();
     if (_requestMIDIAccess) {
       var self = this;
       var onGood = function(midi) {
@@ -628,13 +636,14 @@
       var onBad = function(msg) {
         self._crash(msg);
       };
-      var opt = {sysex:true};
+      var opt = { sysex:true };
       _requestMIDIAccess.call(_navigator, opt).then(onGood, onBad);
       this._pause();
       return;
     }
     this._break();
   }
+
   // Web-extension
   function _tryCRX() {
     var self = this;
@@ -662,6 +671,7 @@
     _schedule(function() { if (!inst) self._crash(); });
   }
 
+  /* istanbul ignore next */
   function _zeroBreak() {
     this._pause();
     var self = this;
@@ -708,7 +718,6 @@
   }
 
   function _initJZZ(opt) {
-    _initAudioContext();
     _jzz = new _J();
     _jzz._options = opt;
     _jzz._push(_tryAny, [_filterEngines(opt)]);
@@ -723,9 +732,9 @@
     _engine._outs = [];
     _engine._ins = [];
     _engine._refresh = function() { _postRefresh(); };
-    _engine._watch = function() {};
-    _engine._unwatch = function() {};
-    _engine._close = function() {};
+    _engine._watch = _nop;
+    _engine._unwatch = _nop;
+    _engine._close = _nop;
   }
   // common initialization for Jazz-Plugin and jazz-midi
   function _initEngineJP() {
@@ -871,6 +880,7 @@
     _engine._newPlugin = function() { return new obj.MIDI(); };
     _initEngineJP();
   }
+  /* istanbul ignore next */
   function _initJazzPlugin(obj) {
     _engine._type = 'plugin';
     _engine._main = obj;
@@ -1241,7 +1251,7 @@
   JZZ.info = function() { return _J.prototype.info(); };
   JZZ.Widget = function(arg) {
     var obj = new _M();
-    if (arg instanceof Object) for (var k in arg) if (arg.hasOwnProperty(k)) obj[k] = arg[k];
+    if (arg instanceof Object) _for(arg, function(k) { obj[k] = arg[k]; });
     obj._resume();
     return obj;
   };
@@ -1492,7 +1502,7 @@
   function _dec(x) { return x < 10 ? '0' + x : x; }
   function _smptetxt(x) {
     var arr = [];
-    for (var i = 0; i < x.length; i++) arr[i] = _dec(x[i]);
+    for (var i = 0; i < x.length; i++) arr[i] = _dec(i ? x[i] : x[i] & 0x1f);
     return arr.join(':');
   }
   SMPTE.prototype.toString = function() { return _smptetxt([this.hour, this.minute, this.second, this.frame]); };
@@ -1505,7 +1515,7 @@
     var i;
     if (arg instanceof MIDI) {
       self._from = arg._from.slice();
-      for (i in arg) if (arg.hasOwnProperty(i) && i != '_from') self[i] = arg[i];
+      _for(arg, function(i) { if (i != '_from') self[i] = arg[i]; });
       return self;
     }
     else self._from = [];
@@ -1529,13 +1539,52 @@
   MIDI.programValue = function(x) { return x; };
   MIDI.freq = function(n, a) {
     if (typeof a == 'undefined') a = 440.0;
-    return (a * Math.pow(2, (_7b(MIDI.noteValue(n), n) - 69.0) / 12.0));
+    _float(a);
+    if (n != parseFloat(n)) n = _7bn(n);
+    return (a * Math.pow(2, (n - 69.0) / 12.0));
   };
-  MIDI.to14b = function(x) { return x <= 0 ? 0 : x >= 1 ? 0x3fff : Math.floor(x * 0x4000); };
+  function _float(x) { if (x != parseFloat(x)) throw TypeError('Not a number: ' + x); }
+  MIDI.shift = function(f, f0) {
+    if (typeof f0 == 'undefined') f0 = 440;
+    _float(f);
+    _float(f0);
+    return Math.log2(f / f0) * 12;
+  };
+  MIDI.midi = function(f, f0) { return MIDI.shift(f, f0) + 69; };
+  MIDI.to14b = function(x) {
+    _float(x);
+    return x <= 0 ? 0 : x >= 1 ? 0x3fff : Math.floor(x * 0x4000);
+  };
+  MIDI.to21b = function(x) {
+    if (typeof x == 'undefined') return 0x1fffff;
+    _float(x);
+    if (x <= 0) return 0;
+    x = (Math.floor(x) << 14) + MIDI.to14b(x - Math.floor(x));
+    return x < 0x1fffff ? x : 0x1ffffe;
+  };
+  function _MIDI() {}
+  _MIDI.prototype = MIDI;
+  MIDI._sxid = 0x7f;
+  MIDI.sxId = function(id) {
+    if (typeof id == 'undefined') id = MIDI._sxid;
+    if (id == this._sxid) return this;
+    id = _7b(id);
+    var ret = new _MIDI();
+    ret._ch = this._ch;
+    ret._sxid = id;
+    return ret;
+  };
+  MIDI.ch = function(c) {
+    if (c == this._ch || typeof c == 'undefined' && typeof this._ch == 'undefined') return this;
+    var ret = new _MIDI();
+    if (typeof c != 'undefined') c = _ch(c);
+    ret._ch = c;
+    ret._sxid = this._sxid;
+    return ret;
+  };
 
   var _noteMap = { c:0, d:2, e:4, f:5, g:7, a:9, b:11, h:11 };
-  for (k in _noteMap) {
-    if (!_noteMap.hasOwnProperty(k)) continue;
+  _for(_noteMap, function(k) {
     for (n = 0; n < 12; n++) {
       m = _noteMap[k] + n * 12;
       if (m > 127) break;
@@ -1543,19 +1592,75 @@
       if (m > 0) { _noteNum[k + 'b' + n] = m - 1; _noteNum[k + 'bb' + n] = m - 2; }
       if (m < 127) { _noteNum[k + '#' + n] = m + 1; _noteNum[k + '##' + n] = m + 2; }
     }
-  }
+  });
   for (n = 0; n < 128; n++) _noteNum[n] = n;
   function _throw(x) { throw RangeError('Bad MIDI value: ' + x); }
+  function _bad(x) { throw TypeError('Invalid value: ' + x); }
+  function _oor(x) { throw RangeError('Out of range: ' + x); }
   function _ch(c) { _validateChannel(c); return parseInt(c); }
   function _7b(n, m) { if (n != parseInt(n) || n < 0 || n > 0x7f) _throw(typeof m == 'undefined' ? n : m); return parseInt(n); }
-  function _8b(n, m) { if (n != parseInt(n) || n < 0 || n > 0xff) _throw(typeof m == 'undefined' ? n : m); return parseInt(n); }
-  function _lsb(n) { if (n != parseInt(n) || n < 0 || n > 0x3fff) _throw(n); return parseInt(n) & 0x7f; }
-  function _msb(n) { if (n != parseInt(n) || n < 0 || n > 0x3fff) _throw(n); return parseInt(n) >> 7; }
+  function _8b(n) { if (n != parseInt(n) || n < 0 || n > 0xff) _throw(n); return parseInt(n); }
+  function _14b(n) { if (n != parseInt(n) || n < 0 || n > 0x3fff) _throw(n); return parseInt(n); }
+  function _16b(n) { if (n != parseInt(n) || n < 0 || n > 0xffff) throw RangeError('Expected a 16-bit value: ' + n); return parseInt(n); }
+  function _21b(n) { if (n != parseInt(n) || n < 0 || n > 0x1fffff) _throw(n); return parseInt(n); }
+  function _7bn(n) { return _7b(MIDI.noteValue(n), n); }
+  function _lsb(n) { return _14b(n) & 0x7f; }
+  function _msb(n) { return _14b(n) >> 7; }
   function _8bs(s) { s = '' + s; for (var i = 0; i < s.length; i++) if (s.charCodeAt(i) > 255) _throw(s[i]); return s; }
+  function _to777(n) { return [n >> 14, (n >> 7) & 0x7f, n & 0x7f]; }
+  function _01(x, y) {
+    if (x != parseFloat(x)) _bad(typeof y == 'undefined' ? x : y);
+    if (x < 0 || x > 1) _oor(typeof y == 'undefined' ? x : y);
+    return parseFloat(x);
+ }
+  function _rt(b) { return typeof b != 'undefined' && !b ? 0x7E : 0x7F; }
+  function _ntu(x) {
+    var k, m;
+    var kkk = [];
+    var vvv = {};
+    _for(x, function(k) {
+      m = _21b(x[k]);
+      k = _7bn(k);
+      if (k in vvv) throw RangeError('Duplicate MIDI value: ' + k);
+      kkk.push(k);
+      vvv[k] = m;
+    });
+    kkk.sort();
+    var out = [kkk.length];
+    for (k = 0; k < kkk.length; k++) out = out.concat([kkk[k]], _to777(vvv[kkk[k]]));
+    return out;
+  }
+  function _f2ntu(x) {
+    var out = {};
+    _for (x, function(k) { out[k] = MIDI.to21b(x[k] == parseFloat(x[k]) ? x[k] : _7bn(x[k])); });
+    return out;
+  }
+  function _hz2ntu(x) {
+    var out = {};
+    _for (x, function(k) { out[k] = MIDI.to21b(MIDI.midi(x[k])); });
+    return out;
+  }
+  function _12x7(a) {
+    var out = [];
+    if (!(a instanceof Array) || a.length != 12) throw TypeError('Expected an array of size 12');
+    for (var i = 0; i < 12; i++) out.push(_7b(a[i]));
+    return out;
+  }
+  function _12x14(a) {
+    var out = [];
+    if (!(a instanceof Array) || a.length != 12) throw TypeError('Expected an array of size 12');
+    for (var i = 0; i < 12; i++) {
+      out.push(_msb(a[i]));
+      out.push(_lsb(a[i]));
+    }
+    return out;
+  }
+  var _helperMPE = {
+    noteOff: function(c, n, v) { if (typeof v == 'undefined') v = 64; return [0x80 + _ch(c), _7bn(n), _7b(v)]; },
+    noteOn: function(c, n, v) { if (typeof v == 'undefined') v = 127; return [0x90 + _ch(c), _7bn(n), _7b(v)]; },
+    aftertouch: function(c, n, v) { return [0xA0 + _ch(c), _7bn(n), _7b(v)]; },
+  };
   var _helperCH = {
-    noteOff: function(c, n, v) { if (typeof v == 'undefined') v = 64; return [0x80 + _ch(c), _7b(MIDI.noteValue(n), n), _7b(v)]; },
-    noteOn: function(c, n, v) { if (typeof v == 'undefined') v = 127; return [0x90 + _ch(c), _7b(MIDI.noteValue(n), n), _7b(v)]; },
-    aftertouch: function(c, n, v) { return [0xA0 + _ch(c), _7b(MIDI.noteValue(n), n), _7b(v)]; },
     control: function(c, n, v) { return [0xB0 + _ch(c), _7b(n), _7b(v)]; },
     program: function(c, n) { return [0xC0 + _ch(c), _7b(MIDI.programValue(n), n)]; },
     pressure: function(c, n) { return [0xD0 + _ch(c), _7b(n)]; },
@@ -1581,10 +1686,22 @@
     panLSB: function(c, n) { return [0xB0 + _ch(c), 0x2A, _7b(n)]; },
     expressionMSB: function(c, n) { return [0xB0 + _ch(c), 0x0B, _7b(n)]; },
     expressionLSB: function(c, n) { return [0xB0 + _ch(c), 0x2B, _7b(n)]; },
-    damper: function(c, b) { return [0xB0 + _ch(c), 0x40, b ? 127 : 0]; },
-    portamento: function(c, b) { return [0xB0 + _ch(c), 0x41, b ? 127 : 0]; },
-    sostenuto: function(c, b) { return [0xB0 + _ch(c), 0x42, b ? 127 : 0]; },
-    soft: function(c, b) { return [0xB0 + _ch(c), 0x43, b ? 127 : 0]; },
+    damper: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), 0x40, b ? 127 : 0]; },
+    portamento: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), 0x41, b ? 127 : 0]; },
+    sostenuto: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), 0x42, b ? 127 : 0]; },
+    soft: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), 0x43, b ? 127 : 0]; },
+    legato: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), 0x44, b ? 127 : 0]; },
+    hold2: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), 0x45, b ? 127 : 0]; },
+    soundVariation: function(c, n) { return [0xB0 + _ch(c), 0x46, _7bn(n)]; },
+    filterResonance: function(c, n) { return [0xB0 + _ch(c), 0x47, _7bn(n)]; },
+    releaseTime: function(c, n) { return [0xB0 + _ch(c), 0x48, _7bn(n)]; },
+    attackTime: function(c, n) { return [0xB0 + _ch(c), 0x49, _7bn(n)]; },
+    brightness: function(c, n) { return [0xB0 + _ch(c), 0x4A, _7bn(n)]; },
+    decayTime: function(c, n) { return [0xB0 + _ch(c), 0x4B, _7bn(n)]; },
+    vibratoRate: function(c, n) { return [0xB0 + _ch(c), 0x4C, _7bn(n)]; },
+    vibratoDepth: function(c, n) { return [0xB0 + _ch(c), 0x4D, _7bn(n)]; },
+    vibratoDelay: function(c, n) { return [0xB0 + _ch(c), 0x4E, _7bn(n)]; },
+    ptc: function(c, n) { return [0xB0 + _ch(c), 0x54, _7bn(n)]; },
     dataIncr: function(c) { return [0xB0 + _ch(c), 0x60, 0]; },
     dataDecr: function(c) { return [0xB0 + _ch(c), 0x61, 0]; },
     nrpnLSB: function(c, n) { return [0xB0 + _ch(c), 0x62, _7b(n)]; },
@@ -1592,7 +1709,12 @@
     rpnLSB: function(c, n) { return [0xB0 + _ch(c), 0x64, _7b(n)]; },
     rpnMSB: function(c, n) { return [0xB0 + _ch(c), 0x65, _7b(n)]; },
     allSoundOff: function(c) { return [0xB0 + _ch(c), 0x78, 0]; },
+    resetAllControllers: function(c) { return [0xB0 + _ch(c), 0x79, 0]; },
+    localControl: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), 0x7a, b ? 127 : 0]; },
     allNotesOff: function(c) { return [0xB0 + _ch(c), 0x7b, 0]; },
+    omni: function(c, b) { if (typeof b == 'undefined') b = true; return [0xB0 + _ch(c), b ? 0x7d : 0x7c, 0]; },
+    mono: function(c, n) { if (typeof n == 'undefined') n = 1; return [0xB0 + _ch(c), 0x7e, _7b(n)]; },
+    poly: function(c) { return [0xB0 + _ch(c), 0x7f, 0]; },
   };
   var _helperNC = { // no channel
     mtc: function(t) { return [0xF1, _mtc(t)]; },
@@ -1604,44 +1726,106 @@
     continue: function() { return [0xFB]; },
     stop: function() { return [0xFC]; },
     active: function() { return [0xFE]; },
-    sxIdRequest: function() { return [0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]; },
-    sxFullFrame: function(t) { return [0xF0, 0x7F, 0x7F, 0x01, 0x01, _hrtype(t), t.getMinute(), t.getSecond(), t.getFrame(), 0xF7]; },
+    sxIdRequest: function() { return [0xF0, 0x7E, this._sxid, 0x06, 0x01, 0xF7]; },
+    sxTuningDumpRequest: function(n, k) { return typeof k == 'undefined' ?
+      [0xF0, 0x7E, this._sxid, 0x08, 0x00, _7b(n), 0xF7] : [0xF0, 0x7E, this._sxid, 0x08, 0x03, _7b(n), _7b(k), 0xF7]; },
+    sxFullFrame: function(t) { return [0xF0, 0x7F, this._sxid, 0x01, 0x01, _hrtype(t), t.getMinute(), t.getSecond(), t.getFrame(), 0xF7]; },
+    sxMasterVolume: function(n, l) { return typeof l == 'undefined' ?
+      [0xF0, 0x7F, this._sxid, 0x04, 0x01, _lsb(n), _msb(n), 0xF7] : [0xF0, 0x7F, this._sxid, 0x04, 0x01, _7b(l), _7b(n), 0xF7]; },
+    sxMasterVolumeF: function(x) { return _helperNC.sxMasterVolume.call(this, MIDI.to14b(_01(x))); },
+    sxMasterFineTuning: function(n, l) { return typeof l == 'undefined' ?
+      [0xF0, 0x7F, this._sxid, 0x04, 0x03, _lsb(n), _msb(n), 0xF7] : [0xF0, 0x7F, this._sxid, 0x04, 0x03, _7b(l), _7b(n), 0xF7]; },
+    sxMasterFineTuningF: function(x) { return _helperNC.sxMasterFineTuning.call(this, MIDI.to14b(_01((x % 1 + 1) / 2, x))); },
+    sxMasterCoarseTuning: function(n) { return [0xF0, 0x7F, this._sxid, 0x04, 0x04, 0x00, _7b(n), 0xF7]; },
+    sxMasterCoarseTuningF: function(x) { return _helperNC.sxMasterCoarseTuning.call(this, 0x40 + (x - x % 1)); },
+    sxNoteTuning: function(a, b, c, d) { return b == parseInt(b) ?
+      [0xF0, _rt(d), this._sxid, 0x08, 0x07, _7b(a), _7b(b)].concat(_ntu(c), [0xF7]) :
+      [0xF0, 0x7F, this._sxid, 0x08, 0x02, _7b(a)].concat(_ntu(b), [0xF7]); },
+    sxNoteTuningF: function(a, b, c, d) { return b == parseInt(b) ?
+      _helperNC.sxNoteTuning.call(this, a, b, _f2ntu(c), d) : _helperNC.sxNoteTuning.call(this, a, _f2ntu(b)); },
+    sxNoteTuningHZ: function(a, b, c, d) { return b == parseInt(b) ?
+      _helperNC.sxNoteTuning.call(this, a, b, _hz2ntu(c), d) : _helperNC.sxNoteTuning.call(this, a, _hz2ntu(b)); },
+    sxScaleTuning1: function(a, b, c) { return a == parseInt(a) ?
+      [0xF0, _rt(c), this._sxid, 0x08, 0x08].concat(_to777(_16b(a)), _12x7(b), [0xF7]) :
+      _helperNC.sxScaleTuning1.call(this, 0xffff, a, b); },
+    sxScaleTuning1F: function(a, b, c) { if (a != parseInt(a)) return _helperNC.sxScaleTuning1F.call(this, 0xffff, a, b);
+      var v = []; for (var i = 0; i < b.length; i++) {
+        if (b[i] < -0.64 || b[i] > 0.63) throw RangeError('Out of range: ' + b[i]);
+        v.push(Math.floor(b[i] * 100 + 64)); }
+      return _helperNC.sxScaleTuning1.call(this, a, v, c); },
+    sxScaleTuning2: function(a, b, c) { return a == parseInt(a) ?
+      [0xF0, _rt(c), this._sxid, 0x08, 0x09].concat(_to777(_16b(a)), _12x14(b), [0xF7]) :
+      _helperNC.sxScaleTuning2.call(this, 0xffff, a, b); },
+    sxScaleTuning2F: function(a, b, c) { if (a != parseInt(a)) return _helperNC.sxScaleTuning2F.call(this, 0xffff, a, b);
+      var v = []; for (var i = 0; i < b.length; i++) {
+        var x = (b[i] + 1) / 2;
+        if (x < -1 || x > 1) throw RangeError('Out of range: ' + b[i]);
+        v.push(MIDI.to14b((b[i] + 1) / 2)); }
+      return _helperNC.sxScaleTuning2.call(this, a, v, c); },
+    sxGM: function(gm) { return [0xF0, 0x7E, this._sxid, 0x09, gm ? gm == 2 ? 3 : 1 : 2, 0xF7]; },
     reset: function() { return [0xFF]; },
   };
-  var _helperG = { // compound messages
+  _helperNC.sxScaleTuning = _helperNC.sxScaleTuning2;
+  _helperNC.sxScaleTuningF = _helperNC.sxScaleTuning2F;
+  var _helperGCH = { // compound messages
     bank: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.bankMSB(c, _msb(m)), _helperCH.bankLSB(c, _lsb(m))] : [_helperCH.bankMSB(c, m), _helperCH.bankLSB(c, l)]; },
-    modF: function(c, x) { return _helperG.mod(c, MIDI.to14b(x)); },
+    modF: function(c, x) { return _helperGCH.mod(c, MIDI.to14b(x)); },
     mod: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.modMSB(c, _msb(m)), _helperCH.modLSB(c, _lsb(m))] : [_helperCH.modMSB(c, m), _helperCH.modLSB(c, l)]; },
-    breathF: function(c, x) { return _helperG.breath(c, MIDI.to14b(x)); },
+    breathF: function(c, x) { return _helperGCH.breath(c, MIDI.to14b(x)); },
     breath: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.breathMSB(c, _msb(m)), _helperCH.breathLSB(c, _lsb(m))] : [_helperCH.breathMSB(c, m), _helperCH.breathLSB(c, l)]; },
-    footF: function(c, x) { return _helperG.foot(c, MIDI.to14b(x)); },
+    footF: function(c, x) { return _helperGCH.foot(c, MIDI.to14b(x)); },
     foot: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.footMSB(c, _msb(m)), _helperCH.footLSB(c, _lsb(m))] : [_helperCH.footMSB(c, m), _helperCH.footLSB(c, l)]; },
-    portamentoTimeF: function(c, x) { return _helperG.portamentoTime(c, MIDI.to14b(x)); },
+    portamentoTimeF: function(c, x) { return _helperGCH.portamentoTime(c, MIDI.to14b(x)); },
     portamentoTime: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.portamentoMSB(c, _msb(m)), _helperCH.portamentoLSB(c, _lsb(m))] : [_helperCH.portamentoMSB(c, m), _helperCH.portamentoLSB(c, l)]; },
-    dataF: function(c, x) { return _helperG.data(c, MIDI.to14b(x)); },
+    dataF: function(c, x) { return _helperGCH.data(c, MIDI.to14b(x)); },
     data: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.dataMSB(c, _msb(m)), _helperCH.dataLSB(c, _lsb(m))] : [_helperCH.dataMSB(c, m), _helperCH.dataLSB(c, l)]; },
-    volumeF: function(c, x) { return _helperG.volume(c, MIDI.to14b(x)); },
+    volumeF: function(c, x) { return _helperGCH.volume(c, MIDI.to14b(x)); },
     volume: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.volumeMSB(c, _msb(m)), _helperCH.volumeLSB(c, _lsb(m))] : [_helperCH.volumeMSB(c, m), _helperCH.volumeLSB(c, l)]; },
-    balanceF: function(c, x) { return _helperG.balance(c, MIDI.to14b((x + 1) / 2)); },
+    balanceF: function(c, x) { return _helperGCH.balance(c, MIDI.to14b((x + 1) / 2)); },
     balance: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.balanceMSB(c, _msb(m)), _helperCH.balanceLSB(c, _lsb(m))] : [_helperCH.balanceMSB(c, m), _helperCH.balanceLSB(c, l)]; },
-    panF: function(c, x) { return _helperG.pan(c, MIDI.to14b((x + 1) / 2)); },
+    panF: function(c, x) { return _helperGCH.pan(c, MIDI.to14b((x + 1) / 2)); },
     pan: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.panMSB(c, _msb(m)), _helperCH.panLSB(c, _lsb(m))] : [_helperCH.panMSB(c, m), _helperCH.panLSB(c, l)]; },
-    expressionF: function(c, x) { return _helperG.expression(c, MIDI.to14b(x)); },
+    expressionF: function(c, x) { return _helperGCH.expression(c, MIDI.to14b(x)); },
     expression: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.expressionMSB(c, _msb(m)), _helperCH.expressionLSB(c, _lsb(m))] : [_helperCH.expressionMSB(c, m), _helperCH.expressionLSB(c, l)]; },
     nrpn: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.nrpnMSB(c, _msb(m)), _helperCH.nrpnLSB(c, _lsb(m))] : [_helperCH.nrpnMSB(c, m), _helperCH.nrpnLSB(c, l)]; },
     rpn: function(c, m, l) { return typeof l == 'undefined' ?
       [_helperCH.rpnMSB(c, _msb(m)), _helperCH.rpnLSB(c, _lsb(m))] : [_helperCH.rpnMSB(c, m), _helperCH.rpnLSB(c, l)]; },
+    rpnPitchBendRange: function(c, m, l) { return _helperGCH.rpn(c, 0, 0).concat(_helperGCH.data(c, m, l)); },
+    rpnPitchBendRangeF: function(c, x) { return _helperGCH.rpnPitchBendRange(c, _7b(x - x % 1), Math.floor((x % 1) * 100)); },
+    rpnFineTuning: function(c, m, l) { return _helperGCH.rpn(c, 0, 1).concat(_helperGCH.data(c, m, l)); },
+    rpnFineTuningF: function(c, x) { return _helperGCH.rpn(c, 0, 1).concat(_helperGCH.dataF(c, (x % 1 + 1) / 2)); },
+    rpnCoarseTuning: function(c, m) { return _helperGCH.rpn(c, 0, 2).concat([_helperCH.dataMSB(c, m)]); },
+    rpnCoarseTuningF: function(c, x) { return _helperGCH.rpn(c, 0, 2).concat([_helperCH.dataMSB(c, 0x40 + (x - x % 1))]); },
+    rpnTuning: function(c, n, m, l) { return _helperGCH.rpnCoarseTuning(c, n).concat(_helperGCH.rpnFineTuning(c, m, l)); },
+    rpnTuningF: function(c, x) { return _helperGCH.rpnCoarseTuningF(c, x).concat(_helperGCH.rpnFineTuningF(c, x)); },
+    rpnTuningA: function(c, a) { return _helperGCH.rpnTuningF(c, MIDI.shift(a)); },
+    rpnSelectTuningProgram: function(c, n) { return _helperGCH.rpn(c, 0, 3).concat([_helperCH.dataMSB(c, n)]); },
+    rpnSelectTuningBank: function(c, n) { return _helperGCH.rpn(c, 0, 4).concat([_helperCH.dataMSB(c, n)]); },
+    rpnSelectTuning: function(c, n, k) { return typeof k == 'undefined' ?
+      _helperGCH.rpnSelectTuningProgram(c, n) : _helperGCH.rpnSelectTuningBank(c, n).concat(_helperGCH.rpnSelectTuningProgram(c, k)); },
+    rpnModulationDepthRange: function(c, m, l) { return _helperGCH.rpn(c, 0, 5).concat(_helperGCH.data(c, m, l)); },
+    rpnModulationDepthRangeF: function(c, x) { return _helperGCH.rpnModulationDepthRange(c, _7b(x - x % 1), Math.floor((x % 1) * 128)); },
+    rpnNull: function(c) { return _helperGCH.rpn(c, 0x7f, 0x7f); },
+    mode1: function(c) { return [ _helperCH.omni(c, true), _helperCH.poly(c) ]; },
+    mode2: function(c) { return [ _helperCH.omni(c, true), _helperCH.mono(c) ]; },
+    mode3: function(c) { return [ _helperCH.omni(c, false), _helperCH.poly(c) ]; },
+    mode4: function(c) { return [ _helperCH.omni(c, false), _helperCH.mono(c) ]; },
+  };
+  var _helperGNC = { // compound messages no channel
+    sxMasterTuning: function(n, m, l) { return [_helperNC.sxMasterCoarseTuning.call(this, n), _helperNC.sxMasterFineTuning.call(this, m, l)]; },
+    sxMasterTuningF: function(x) { return [_helperNC.sxMasterCoarseTuningF.call(this, x), _helperNC.sxMasterFineTuningF.call(this, x)]; },
+    sxMasterTuningA: function(a) { return _helperGNC.sxMasterTuningF.call(this, MIDI.shift(a)); },
   };
   function _smf(ff, dd) {
     var midi = new MIDI();
@@ -1668,7 +1852,7 @@
         dd = '' + dd;
         if (dd.length == 0) dd = '\x00\x00';
         else if (dd.length == 1) dd = '\x00' + dd;
-        else if (dd.length > 2) throw RangeError('Sequence number out of range: ' + _smftxt(dd));
+        else if (dd.length > 2) throw RangeError('Sequence number out of range' + _smftxt(dd));
       }
       return _smf(0, dd);
     },
@@ -1689,7 +1873,7 @@
       else {
         dd = '' + dd;
         if (dd.length == 0) dd = '\x00';
-        else if (dd.length > 1 || dd.charCodeAt(0) > 15) throw RangeError('Channel number out of range: ' + _smftxt(dd));
+        else if (dd.length > 1 || dd.charCodeAt(0) > 15) throw RangeError('Channel number out of range' + _smftxt(dd));
       }
       return _smf(32, dd);
     },
@@ -1701,12 +1885,12 @@
       else {
         dd = '' + dd;
         if (dd.length == 0) dd = '\x00';
-        else if (dd.length > 1 || dd.charCodeAt(0) > 127) throw RangeError('Port number out of range: ' + _smftxt(dd));
+        else if (dd.length > 1 || dd.charCodeAt(0) > 127) throw RangeError('Port number out of range' + _smftxt(dd));
       }
       return _smf(33, dd);
     },
     smfEndOfTrack: function(dd) {
-      if (_2s(dd) != '') throw RangeError('Unexpected data: ' + _smftxt(_2s(dd)));
+      if (_2s(dd) != '') throw RangeError('Unexpected data' + _smftxt(_2s(dd)));
       return _smf(47);
     },
     smfTempo: function(dd) { // microseconds per quarter note
@@ -1714,7 +1898,7 @@
       if (dd == parseInt(dd) && dd > 0 && dd <= 0xffffff) {
         return _smf(81, String.fromCharCode(dd >> 16) + String.fromCharCode((dd >> 8) & 0xff) + String.fromCharCode(dd & 0xff));
       }
-      throw RangeError('Out of range: ' + _smftxt(_2s(dd)));
+      throw RangeError('Out of range' + _smftxt(_2s(dd)));
     },
     smfBPM: function(bpm) { return _helperSMF.smfTempo(Math.round(60000000.0 / bpm)); },
     smfSMPTE: function(dd) {
@@ -1733,7 +1917,7 @@
       if (m) {
         nn = parseInt(m[1]);
         dd = parseInt(m[2]);
-        if (nn > 0 && nn <= 0xff && dd && !(dd & (dd - 1))) {
+        if (nn > 0 && nn < 0x100 && dd > 0 && !(dd & (dd - 1))) {
           cc = dd; dd = 0;
           for (cc >>= 1; cc; cc >>= 1) dd++;
           cc = b == parseInt(b) ? b : 24;
@@ -1742,17 +1926,21 @@
         }
         else if (('' + a ).length == 4) return _smf(88, a);
       }
-      else if (a == parseInt(a) && b == parseInt(b) && b && !(b & (b - 1))) {
-        nn = a;
-        dd = 0;
-        cc = b;
-        for (cc >>= 1; cc; cc >>= 1) dd++;
-        cc = c == parseInt(c) ? c : 24;
-        bb = d == parseInt(d) ? d : 8;
-        return _smf(88, String.fromCharCode(nn) + String.fromCharCode(dd) + String.fromCharCode(cc) + String.fromCharCode(bb));
+      else if (a == parseInt(a) && b == parseInt(b)) {
+        if (a > 0 && a < 0x100 && b > 0 && !(b & (b - 1))) {
+          nn = a;
+          dd = 0;
+          cc = b;
+          for (cc >>= 1; cc; cc >>= 1) dd++;
+          cc = c == parseInt(c) ? c : 24;
+          bb = d == parseInt(d) ? d : 8;
+          return _smf(88, String.fromCharCode(nn) + String.fromCharCode(dd) + String.fromCharCode(cc) + String.fromCharCode(bb));
+        }
+        else if (('' + a ).length == 4) return _smf(88, a);
+        a = a + '/' + b;
       }
       else if (('' + a ).length == 4) return _smf(88, a);
-      throw RangeError('Wrong time signature: ' + _smftxt(_2s(a)));
+      throw RangeError('Wrong time signature' + _smftxt(_2s('' + a)));
     },
     smfKeySignature: function(dd) {
       dd = '' + dd;
@@ -1771,100 +1959,115 @@
         }
       }
       if (dd.length == 2 && dd.charCodeAt(1) <= 1 && (dd.charCodeAt(0) <= 7 || dd.charCodeAt(0) <= 255 && dd.charCodeAt(0) >= 249)) return _smf(89, dd);
-      throw RangeError('Incorrect key signature: ' + _smftxt(dd));
+      throw RangeError('Incorrect key signature' + _smftxt(dd));
     },
     smfSequencer: function(dd) { return _smf(127, _2s(dd)); }
   };
 
-  function _copyPortHelper(M, name, func) {
-    M.prototype[name] = function() { return this.send(func.apply(0, arguments)); };
-  }
-  function _copyPortHelperG(M, name, func) {
-    M.prototype[name] = function() {
-      var a = func.apply(0, arguments);
-      var g = this;
-      for (var i = 0; i < a.length; i++) g = g.send(a[i]);
-      return g;
-    };
-  }
-  function _copyChannelHelper(C, name, func) {
-    C.prototype[name] = function() {
-      return this.send(func.apply(0, [this._chan].concat(Array.prototype.slice.call(arguments))));
-    };
-  }
-  function _copyChannelHelperG(C, name, func) {
-    C.prototype[name] = function() {
-      var a = func.apply(0, [this._chan].concat(Array.prototype.slice.call(arguments)));
-      var g = this;
-      for (var i = 0; i < a.length; i++) g = g.send(a[i]);
-      return g;
-    };
-  }
+  var _helpers = {};
   function _copyHelperNC(name, func) {
-    MIDI[name] = function() { return new MIDI(func.apply(0, arguments)); };
+    MIDI[name] = function() { return new MIDI(func.apply(this, arguments)); };
+    _helpers[name] = function() { return this.send(func.apply(this, arguments)); };
   }
   function _copyHelperSMF(name, func) {
-    MIDI[name] = function() { return func.apply(0, arguments); };
+    MIDI[name] = function() { return func.apply(this, arguments); };
+    _helpers[name] = function() { return this.send(func.apply(this, arguments)); };
   }
-  function _copyHelperG(name, func) {
+  function _copyHelperGNC(name, func) {
     MIDI[name] = function() {
       var i;
       var g = [];
-      var a = func.apply(0, arguments);
+      var a = func.apply(this, arguments);
       for (i = 0; i < a.length; i++) g.push(new MIDI(a[i]));
       return g;
     };
-  }
-  function _copyHelperCH(name, func) {
-    _copyHelperNC(name, func);
-    _E.prototype[name] = function() {
-      var chan;
-      var args = Array.prototype.slice.call(arguments);
-      if (args.length < func.length) args = [this._master].concat(args);
-      else {
-        chan = _7b(MIDI.noteValue(args[0], args[0]));
-        args[0] = this._master;
-      }
-      var msg = func.apply(0, args);
-      msg.mpe = chan;
-      this.send(msg);
-      return this;
+    _helpers[name] = function() {
+      var a = func.apply(this, arguments);
+      var g = this;
+      for (var i = 0; i < a.length; i++) g = g.send(a[i]);
+      return g;
     };
   }
-  for (k in _helperNC) if (_helperNC.hasOwnProperty(k)) _copyHelperNC(k, _helperNC[k]);
-  for (k in _helperSMF) if (_helperSMF.hasOwnProperty(k)) _copyHelperSMF(k, _helperSMF[k]);
-  for (k in _helperCH) if (_helperCH.hasOwnProperty(k)) _copyHelperCH(k, _helperCH[k]);
-  for (k in _helperG) if (_helperG.hasOwnProperty(k)) _copyHelperG(k, _helperG[k]);
-  function _copyMidiHelpers(M, C) {
-    for (k in _helperNC) if (_helperNC.hasOwnProperty(k)) _copyPortHelper(M, k, _helperNC[k]);
-    for (k in _helperSMF) if (_helperSMF.hasOwnProperty(k)) _copyPortHelper(M, k, _helperSMF[k]);
-    for (k in _helperCH) if (_helperCH.hasOwnProperty(k)) _copyPortHelper(M, k, _helperCH[k]);
-    for (k in _helperG) if (_helperG.hasOwnProperty(k)) _copyPortHelperG(M, k, _helperG[k]);
-    if (C) {
-      for (k in _helperCH) if (_helperCH.hasOwnProperty(k)) _copyChannelHelper(C, k, _helperCH[k]);
-      for (k in _helperG) if (_helperG.hasOwnProperty(k)) _copyChannelHelperG(C, k, _helperG[k]);
-    }
+  function _copyHelperMPE(name, func) {
+    MIDI[name] = function() {
+      return new MIDI(func.apply(this, typeof this._ch == 'undefined' ? arguments : [this._ch].concat(Array.prototype.slice.call(arguments))));
+    };
+    _helpers[name] = function() {
+      if (typeof this._master != 'undefined') {
+        var msg = new MIDI(func.apply(this, [this._master].concat(Array.prototype.slice.call(arguments))));
+        msg._mpe = msg[1];
+        return this.send(msg);
+      }
+      return this.send(func.apply(this, typeof this._ch == 'undefined' ? arguments : [this._ch].concat(Array.prototype.slice.call(arguments))));
+    };
   }
-  _copyMidiHelpers(_M, _C);
+  function _copyHelperCH(name, func) {
+    MIDI[name] = function() {
+      return new MIDI(func.apply(this, typeof this._ch == 'undefined' ? arguments : [this._ch].concat(Array.prototype.slice.call(arguments))));
+    };
+    _helpers[name] = function() {
+      if (typeof this._master != 'undefined') {
+        var chan;
+        var args = Array.prototype.slice.call(arguments);
+        if (args.length < func.length) args = [this._master].concat(args);
+        else {
+          chan = _7bn(args[0]);
+          args[0] = this._master;
+        }
+        var msg = new MIDI(func.apply(this, args));
+        msg._mpe = chan;
+        return this.send(msg);
+      }
+      return this.send(func.apply(this, typeof this._ch == 'undefined' ? arguments : [this._ch].concat(Array.prototype.slice.call(arguments))));
+    };
+  }
+  function _copyHelperGCH(name, func) {
+    MIDI[name] = function() {
+      var i;
+      var g = [];
+      var a = func.apply(this, typeof this._ch == 'undefined' ? arguments : [this._ch].concat(Array.prototype.slice.call(arguments)));
+      for (i = 0; i < a.length; i++) g.push(new MIDI(a[i]));
+      return g;
+    };
+    _helpers[name] = function() {
+      var i;
+      var a;
+      var g;
+      if (typeof this._master != 'undefined') {
+        var chan;
+        var args = Array.prototype.slice.call(arguments);
+        if (args.length < func.length) args = [this._master].concat(args);
+        else {
+          chan = _7bn(args[0]);
+          args[0] = this._master;
+        }
+        a = func.apply(this, args);
+        g = this;
+        for (i = 0; i < a.length; i++) {
+          var msg = MIDI(a[i]);
+          msg._mpe = chan;
+          g = g.send(msg);
+        }
+        return g;
+      }
+      a = func.apply(this, typeof this._ch == 'undefined' ? arguments : [this._ch].concat(Array.prototype.slice.call(arguments)));
+      g = this;
+      for (i = 0; i < a.length; i++) g = g.send(a[i]);
+      return g;
+    };
+  }
 
-  _E.prototype.noteOn = function(n, v) {
-    var msg = MIDI.noteOn(this._master, n, v);
-    msg._mpe = msg[1];
-    this.send(msg);
-    return this;
-  };
-  _E.prototype.noteOff = function(n, v) {
-    var msg = MIDI.noteOff(this._master, n, v);
-    msg._mpe = msg[1];
-    this.send(msg);
-    return this;
-  };
-  _E.prototype.aftertouch = function(n, v) {
-    var msg = MIDI.aftertouch(this._master, n, v);
-    msg._mpe = msg[1];
-    this.send(msg);
-    return this;
-  };
+  _for(_helperNC, function(n) { _copyHelperNC(n, _helperNC[n]); });
+  _for(_helperSMF, function(n) { _copyHelperSMF(n, _helperSMF[n]); });
+  _for(_helperGNC, function(n) { _copyHelperGNC(n, _helperGNC[n]); });
+  _for(_helperMPE, function(n) { _copyHelperMPE(n, _helperMPE[n]); });
+  _for(_helperCH, function(n) { _copyHelperCH(n, _helperCH[n]); });
+  _for(_helperGCH, function(n) { _copyHelperGCH(n, _helperGCH[n]); });
+
+  function _copyMidiHelpers(M) {
+    _for(_helpers, function(n) { M.prototype[n] = _helpers[n]; });
+  }
+  _copyMidiHelpers(_M);
 
   var _channelMap = { a:10, b:11, c:12, d:13, e:14, f:15, A:10, B:11, C:12, D:13, E:14, F:15 };
   for (k = 0; k < 16; k++) _channelMap[k] = k;
@@ -1908,10 +2111,10 @@
     if (x >= 0 && x < 128) this[2] = x;
     return this;
   };
-  MIDI.prototype.getSysExChannel = function() {
+  MIDI.prototype.getSysExId = function() {
     if (this[0] == 0xf0) return this[2];
   };
-  MIDI.prototype.setSysExChannel = function(x) {
+  MIDI.prototype.setSysExId = function(x) {
     if (this[0] == 0xf0 && this.length > 2) {
       x = parseInt(x);
       if (x >= 0 && x < 128) this[2] = x;
@@ -2134,21 +2337,21 @@
       49: 'General Purpose Controller 2 LSB',
       50: 'General Purpose Controller 3 LSB',
       51: 'General Purpose Controller 4 LSB',
-      64: 'Damper Pedal On/Off',
-      65: 'Portamento On/Off',
-      66: 'Sostenuto On/Off',
-      67: 'Soft Pedal On/Off',
-      68: 'Legato Footswitch',
+      64: 'Damper Pedal',
+      65: 'Portamento',
+      66: 'Sostenuto',
+      67: 'Soft Pedal',
+      68: 'Legato',
       69: 'Hold 2',
-      70: 'Sound Controller 1',
-      71: 'Sound Controller 2',
-      72: 'Sound Controller 3',
-      73: 'Sound Controller 4',
-      74: 'Sound Controller 5',
-      75: 'Sound Controller 6',
-      76: 'Sound Controller 7',
-      77: 'Sound Controller 8',
-      78: 'Sound Controller 9',
+      70: 'Sound Variation',
+      71: 'Filter Resonance',
+      72: 'Release Time',
+      73: 'Attack Time',
+      74: 'Brightness',
+      75: 'Decay Time',
+      76: 'Vibrato Rate',
+      77: 'Vibrato Depth',
+      78: 'Vibrato Delay',
       79: 'Sound Controller 10',
       80: 'General Purpose Controller 5',
       81: 'General Purpose Controller 6',
@@ -2176,6 +2379,7 @@
       126: 'Mono Mode On',
       127: 'Poly Mode On'
     }[this[1]];
+    if (this[1] >= 64 && this[1] <= 69) ss += this[2] < 64 ? ' Off' : ' On';
     if (!ss) ss = 'Undefined';
     return s + ' -- ' + ss;
   };
@@ -2456,6 +2660,7 @@
         out += String.fromCharCode(0x80 + ((n >> 6) & 0x3f));
         out += String.fromCharCode(0x80 + (n & 0x3f));
       }
+      /* istanbul ignore next */
       else {
         out += String.fromCharCode(0xf0 + (n >> 18));
         out += String.fromCharCode(0x80 + ((n >> 12) & 0x3f));
@@ -2472,16 +2677,17 @@
   var _inputMap = {};
 
   var Promise = _scope.Promise;
+  /* istanbul ignore next */
   if (typeof Promise !== 'function') {
     Promise = function(executor) {
       this.executor = executor;
     };
     Promise.prototype.then = function(resolve, reject) {
       if (typeof resolve !== 'function') {
-        resolve = function() {};
+        resolve = _nop;
       }
       if (typeof reject !== 'function') {
-        reject = function() {};
+        reject = _nop;
       }
       this.executor(resolve, reject);
     };
@@ -2549,9 +2755,9 @@
     Object.defineProperty(this, 'onmidimessage', {
       get: function() { return _onmsg; },
       set: function(value) {
-        if (value instanceof Function) {
+        if (_func(value)) {
           _onmsg = value;
-          if (!_open) try { self.open(); } catch(e) {/**/}
+          if (!_open) self.open().then(_nop, _nop);
         }
         else _onmsg = null;
       },
@@ -2560,7 +2766,7 @@
     Object.defineProperty(this, 'onstatechange', {
       get: function() { return _ochng; },
       set: function(value) {
-        if (value instanceof Function) _ochng = value;
+        if (_func(value)) _ochng = value;
         else _ochng = null;
       },
       enumerable: true
@@ -2758,7 +2964,7 @@
     Object.defineProperty(this, 'onstatechange', {
       get: function() { return _ochng; },
       set: function(value) {
-        if (value instanceof Function) _ochng = value;
+        if (_func(value)) _ochng = value;
         else _ochng = null;
       },
       enumerable: true
@@ -2800,8 +3006,7 @@
         if (timestamp > now) setTimeout(function() { p.proxy.send(data); }, timestamp - now);
         else p.proxy.send(data);
       }
-      else this.open().then(function() { self.send(data, timestamp); });
-
+      else this.open().then(function() { self.send(data, timestamp); }, _nop);
     };
     Object.freeze(this);
   }
@@ -2982,7 +3187,7 @@
     this.outputs = new MIDIOutputMap(self, _outputs);
     Object.defineProperty(this, 'onstatechange', {
       get: function() { return _onstatechange; },
-      set: function(f) { _onstatechange = f instanceof Function ? f : null; },
+      set: function(f) { _onstatechange = _func(f) ? f : null; },
       enumerable: true
     });
     Object.freeze(this);
@@ -3181,7 +3386,7 @@
       self.fileInput.type = 'file';
       self.fileInput.style.position = 'fixed';
       self.fileInput.style.top = '-1000px';
-      self.fileInput.accept = '.mid, .midi, .kar, .rmi';
+      self.fileInput.accept = '.mid, .midi, .kar, .rmi, .syx';
       self.gui.appendChild(self.fileInput);
 
       if (window.FileReader) {
@@ -3284,6 +3489,7 @@
       link: false,
       midi: true,
       close: false,
+      sndoff: true,
       ports: [undefined, /MIDI Through/i],
       connect: true
     };
@@ -3296,6 +3502,7 @@
     arg.ports.push(undefined);
     this._ports = arg.ports;
     this._conn = arg.connect;
+    this._sndoff = arg.sndoff;
     this.disable();
 
     if (typeof arg.at == 'string') {
@@ -3360,6 +3567,7 @@
     this._player.connect(this);
     this._player.onEnd = function() { self._onEnd(); };
     this._player.filter(this._setfilter);
+    if (!this._sndoff) this._player.sndOff = empty;
     this.enable();
     this.onLoad(smf);
   };
@@ -3530,8 +3738,13 @@
       var data = '';
       var bytes = new Uint8Array(e.target.result);
       for (var i = 0; i < bytes.length; i++) data += String.fromCharCode(bytes[i]);
+      var smf;
       try {
-        var smf = new JZZ.MIDI.SMF(data);
+        smf = new JZZ.MIDI.SYX(data);
+      }
+      catch (err) {}
+      try {
+        if (!smf) smf = new JZZ.MIDI.SMF(data);
         self.stop();
         JZZ.lib.schedule(function() { self.load(smf); });
         if (self.linkBtn) self.setUrl('data:audio/midi;base64,' + JZZ.lib.toBase64(data), f.name);
@@ -3743,6 +3956,7 @@
 });
 
 (function(global, factory) {
+  /* istanbul ignore next */
   if (typeof exports === 'object' && typeof module !== 'undefined') {
     module.exports = factory;
   }
@@ -3754,9 +3968,10 @@
   }
 })(this, function(JZZ) {
 
+  /* istanbul ignore next */
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.4.2';
+  var _ver = '1.5.3';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -3789,8 +4004,37 @@
       if (arguments[0] instanceof SMF) {
         return arguments[0].copy();
       }
+      if (arguments[0] instanceof SYX) {
+        self.type = 0;
+        self.ppqn = ppqn;
+        self.push(new MTrk());
+        for (var i = 0; i < arguments[0].length; i++) self[0].add(0, arguments[0][i]);
+        return self;
+      }
+      try {
+        if (arguments[0] instanceof ArrayBuffer) {
+          self.load(String.fromCharCode.apply(null, new Uint8Array(arguments[0])));
+          return self;
+        }
+      }
+      catch (err) {/**/}
+      try {
+        if (arguments[0] instanceof Uint8Array || arguments[0] instanceof Int8Array) {
+          self.load(String.fromCharCode.apply(null, new Uint8Array(arguments[0])));
+          return self;
+        }
+      }
+      catch (err) {/**/}
+      try {
+        if (arguments[0] instanceof Buffer) {
+          self.load(arguments[0].toString('binary'));
+          return self;
+        }
+      }
+      catch (err) {/**/}
       if (typeof arguments[0] == 'string' && arguments[0] != '0' && arguments[0] != '1' && arguments[0] != '2') {
-        self.load(arguments[0]); return self;
+        self.load(arguments[0]);
+        return self;
       }
       type = parseInt(arguments[0]);
     }
@@ -3807,12 +4051,12 @@
     if (isNaN(type) || type < 0 || type > 2) _error('Invalid parameters');
     self.type = type;
     if (typeof fps == 'undefined') {
-      if (isNaN(ppqn) || ppqn < 0 || type > 0xffff) _error('Invalid parameters');
+      if (isNaN(ppqn) || ppqn < 0 || ppqn > 0xffff) _error('Invalid parameters');
       self.ppqn = ppqn;
     }
     else {
       if (fps != 24 && fps != 25 && fps != 29 && fps != 30) _error('Invalid parameters');
-      if (isNaN(ppf) || ppf < 0 || type > 0xff) _error('Invalid parameters');
+      if (isNaN(ppf) || ppf < 0 || ppf > 0xff) _error('Invalid parameters');
       self.fps = fps;
       self.ppf = ppf;
     }
@@ -3945,6 +4189,22 @@
     s = MThd0006 + String.fromCharCode(0) + String.fromCharCode(this.type) + _num2(this.ntrk) + s;
     return s;
   };
+  SMF.prototype.toBuffer = function(rmi) {
+    return Buffer.from(this.dump(rmi), 'binary');
+  };
+  SMF.prototype.toUint8Array = function(rmi) {
+    var str = this.dump(rmi);
+    var buf = new ArrayBuffer(str.length);
+    var arr = new Uint8Array(buf);
+    for (var i = 0; i < str.length; i++) arr[i] = str.charCodeAt(i);
+    return arr;
+  };
+  SMF.prototype.toArrayBuffer = function(rmi) {
+    return this.toUint8Array(rmi).buffer;
+  };
+  SMF.prototype.toInt8Array = function(rmi) {
+    return new Int8Array(this.toArrayBuffer(rmi));
+  };
   SMF.prototype.toString = function() {
     var i;
     this.ntrk = 0;
@@ -3961,17 +4221,17 @@
 
   function _var2num(s) {
     if (!s.length) return 0; // missing last byte
-    if (s.charCodeAt(0) < 0x80) return s.charCodeAt(0);
+    if (s.charCodeAt(0) < 0x80) return [1, s.charCodeAt(0)];
     var x = s.charCodeAt(0) & 0x7f;
     x <<= 7;
-    if (s.charCodeAt(1) < 0x80) return x + s.charCodeAt(1);
+    if (s.charCodeAt(1) < 0x80) return [2, x + s.charCodeAt(1)];
     x += s.charCodeAt(1) & 0x7f;
     x <<= 7;
-    if (s.charCodeAt(2) < 0x80) return x + s.charCodeAt(2);
+    if (s.charCodeAt(2) < 0x80) return [3, x + s.charCodeAt(2)];
     x += s.charCodeAt(2) & 0x7f;
     x <<= 7;
     x += s.charCodeAt(3) & 0x7f;
-    return s.charCodeAt(3) < 0x80 ? x : -x;
+    return [4, s.charCodeAt(3) < 0x80 ? x : -x];
   }
   function _msglen(n) {
     switch (n & 0xf0) {
@@ -3989,7 +4249,6 @@
     var pl = new Player();
     pl.ppqn = this.ppqn;
     pl.fps = this.fps;
-    pl.ppf = this.ppf;
     pl.ppf = this.ppf;
     var i;
     var j;
@@ -4076,13 +4335,23 @@
     }
     return x;
   }
-  function _validate_number(trk, s, off, t) {
-    var n = _var2num(s);
-    if (n < 0) {
-      n = -n;
+  function _validate_number(trk, s, off, t, tt) {
+    var nn = _var2num(s);
+    if (tt) t += nn[1];
+    if (nn[1] < 0) {
+      nn[1] = -nn[1];
       trk._complain(off, "Bad byte sequence", s.charCodeAt(0) + '/' + s.charCodeAt(1) + '/' + s.charCodeAt(2) + '/' + s.charCodeAt(3), t);
     }
-    return n;
+    else if (nn[0] == 4 && nn[1] < 0x200000) {
+      trk._complain(off, "Long VLQ value", s.charCodeAt(0) + '/' + s.charCodeAt(1) + '/' + s.charCodeAt(2) + '/' + s.charCodeAt(3), t);
+    }
+    else if (nn[0] == 3 && nn[1] < 0x4000) {
+      trk._complain(off, "Long VLQ value", s.charCodeAt(0) + '/' + s.charCodeAt(1) + '/' + s.charCodeAt(2), t);
+    }
+    else if (nn[0] == 2 && nn[1] < 0x80) {
+      trk._complain(off, "Long VLQ value", s.charCodeAt(0) + '/' + s.charCodeAt(1), t);
+    }
+    return nn;
   }
 
   function MTrk(s, off) {
@@ -4096,19 +4365,15 @@
     var t = 0;
     var p = 0;
     var w = '';
-    var d;
     var st;
     var m;
     var offset;
     off = off || 0;
     off += 8;
     while (p < s.length) {
-      d = _validate_number(this, s.substr(p, 4), offset, t + d);
-      p++;
-      if (d > 0x7f) p++;
-      if (d > 0x3fff) p++;
-      if (d > 0x1fffff) p++;
-      t += d;
+      m = _validate_number(this, s.substr(p, 4), offset, t, true);
+      p += m[0];
+      t += m[1];
       offset = p + off;
       if (s.charCodeAt(p) == 0xff) {
         st = s.substr(p, 2);
@@ -4118,23 +4383,17 @@
         }
         p += 2;
         m = _validate_number(this, s.substr(p, 4), offset + 2, t);
-        p++;
-        if (m > 0x7f) p++;
-        if (m > 0x3fff) p++;
-        if (m > 0x1fffff) p++;
-        this.push (new Event(t, st, s.substr(p, m), offset));
-        p += m;
+        p += m[0];
+        this.push (new Event(t, st, s.substr(p, m[1]), offset));
+        p += m[1];
       }
       else if (s.charCodeAt(p) == 0xf0 || s.charCodeAt(p) == 0xf7) {
         st = s.substr(p, 1);
         p += 1;
         m = _validate_number(this, s.substr(p, 4), offset + 1, t);
-        p++;
-        if (m > 0x7f) p++;
-        if (m > 0x3fff) p++;
-        if (m > 0x1fffff) p++;
-        this.push(new Event(t, st, s.substr(p, m), offset));
-        p += m;
+        p += m[0];
+        this.push(new Event(t, st, s.substr(p, m[1]), offset));
+        p += m[1];
       }
       else if (s.charCodeAt(p) & 0x80) {
         w = s.substr(p, 1);
@@ -4156,36 +4415,45 @@
 
   MTrk.prototype = [];
   MTrk.prototype.constructor = MTrk;
+  MTrk.prototype.type = 'MTrk';
   MTrk.prototype.copy = function() {
     var trk = new MTrk();
     trk.length = 0;
     for (var i = 0; i < this.length; i++) trk.push(new JZZ.MIDI(this[i]));
     return trk;
   };
+  function _shortmsg(msg) {
+    var s = msg.toString();
+    if (s.length > 80) {
+      s = s.substr(0, 78);
+      s = s.substr(0, s.lastIndexOf(' ')) + ' ...';
+    }
+    return s;
+  }
   function _metaevent_len(msg, name, len) {
-    if (msg.dd.length < len) return _issue(msg._off, 'Invalid ' + name + ' meta event: ' + (msg.dd.length ? 'data too short' : 'no data'), msg.toString(), msg.tt);
-    if (msg.dd.length > len) return _issue(msg._off, 'Invalid ' + name + ' meta event: data too long', msg.toString(), msg.tt);
+    if (msg.dd.length < len) return _issue(msg._off, 'Invalid ' + name + ' meta event: ' + (msg.dd.length ? 'data too short' : 'no data'), _shortmsg(msg), msg.tt);
+    if (msg.dd.length > len) return _issue(msg._off, 'Invalid ' + name + ' meta event: data too long', _shortmsg(msg), msg.tt);
   }
   function _timing_first_track(msg, name) {
-    return _issue(msg._off, name + ' meta events must be in the first track', msg.toString(), msg.tt);
+    return _issue(msg._off, name + ' meta events must be in the first track', _shortmsg(msg), msg.tt);
   }
   function _validate_midi(msg, tr) {
     var issue;
     if (typeof msg.ff != 'undefined') {
-      if (msg.ff > 0x7f) return _issue(msg._off, 'Invalid meta event', msg.toString(), msg.tt);
+      if (msg.ff > 0x7f) return _issue(msg._off, 'Invalid meta event', _shortmsg(msg), msg.tt);
       else if (msg.ff == 0) {
         issue = _metaevent_len(msg, 'Sequence Number', 2); if (issue) return issue;
       }
       else if (msg.ff < 10) {
-        if (!msg.dd.length) return _issue(msg._off, 'Invalid Text meta event: no data', msg.toString(), msg.tt);
+        if (!msg.dd.length) return _issue(msg._off, 'Invalid Text meta event: no data', _shortmsg(msg), msg.tt);
       }
       else if (msg.ff == 32) {
         issue = _metaevent_len(msg, 'Channel Prefix', 1); if (issue) return issue;
-        if (msg.dd.charCodeAt(0) > 15) return _issue(msg._off, 'Invalid Channel Prefix meta event: incorrect data', msg.toString(), msg.tt);
+        if (msg.dd.charCodeAt(0) > 15) return _issue(msg._off, 'Invalid Channel Prefix meta event: incorrect data', _shortmsg(msg), msg.tt);
       }
       else if (msg.ff == 33) {
         issue = _metaevent_len(msg, 'MIDI Port', 1); if (issue) return issue;
-        if (msg.dd.charCodeAt(0) > 127) return _issue(msg._off, 'Invalid MIDI Port meta event: incorrect data', msg.toString(), msg.tt);
+        if (msg.dd.charCodeAt(0) > 127) return _issue(msg._off, 'Invalid MIDI Port meta event: incorrect data', _shortmsg(msg), msg.tt);
       }
       else if (msg.ff == 47) {
         issue = _metaevent_len(msg, 'End of Track', 0); if (issue) return issue;
@@ -4196,12 +4464,13 @@
       }
       else if (msg.ff == 84) {
         issue = _metaevent_len(msg, 'SMPTE', 5); if (issue) return issue;
-        if (msg.dd.charCodeAt(0) >= 24 || msg.dd.charCodeAt(1) >= 60 || msg.dd.charCodeAt(2) >= 60 || msg.dd.charCodeAt(3) >= 30 || msg.dd.charCodeAt(4) >= 200 || msg.dd.charCodeAt(4) % 25) return _issue(msg._off, 'Invalid SMPTE meta event: incorrect data', msg.toString(), msg.tt);
+        if ((msg.dd.charCodeAt(0) & 0x1f) >= 24 || msg.dd.charCodeAt(1) >= 60 || msg.dd.charCodeAt(2) >= 60 || msg.dd.charCodeAt(3) >= 30 || msg.dd.charCodeAt(4) >= 200 || msg.dd.charCodeAt(4) % 25) return _issue(msg._off, 'Invalid SMPTE meta event: incorrect data', _shortmsg(msg), msg.tt);
+        else if ((msg.dd.charCodeAt(0) >> 5) > 3) return _issue(msg._off, 'Invalid SMPTE meta event: incorrect format', msg.dd.charCodeAt(0) >> 5, msg.tt);
         if (tr) return _timing_first_track(msg, 'SMPTE');
       }
       else if (msg.ff == 88) {
         issue = _metaevent_len(msg, 'Time Signature', 4); if (issue) return issue;
-        if (msg.dd.charCodeAt(1) > 8) return _issue(msg._off, 'Invalid Time Signature meta event: incorrect data', msg.toString(), msg.tt);
+        if (msg.dd.charCodeAt(1) > 8) return _issue(msg._off, 'Invalid Time Signature meta event: incorrect data', _shortmsg(msg), msg.tt);
         if (tr) return _timing_first_track(msg, 'Time Signature');
       }
       else if (msg.ff == 89) {
@@ -4212,7 +4481,7 @@
         // Sequencer Specific meta event
       }
       else {
-        return _issue(msg._off, 'Unknown meta event', msg.toString(), msg.tt);
+        return _issue(msg._off, 'Unknown meta event', _shortmsg(msg), msg.tt);
       }
     }
     else {
@@ -4280,60 +4549,62 @@
     if(isNaN(t) || t < 0) _error('Invalid parameter');
     msg = JZZ.MIDI(msg);
     msg.tt = t;
-    if (this[this.length - 1].tt < t) this[this.length - 1].tt = t; // end of track
-    if (msg.ff == 0x2f || msg[0] == 0xff) return this;
+    if (this[this._orig.length - 1].tt < t) this[this._orig.length - 1].tt = t; // end of track
+    if (msg.ff == 0x2f || msg[0] > 0xf0 && msg[0] != 0xf7) return this;
     var i;
-    for (i = 0; i < this.length - 1; i++) {
-      if (this[i].tt > t) break;
+    for (i = 0; i < this._orig.length - 1; i++) {
+      if (this._orig[i].tt > t) break;
     }
-    this.splice(i, 0, msg);
+    this._orig.splice(i, 0, msg);
     return this;
   };
 
+  MTrk.prototype._ch = undefined;
+  MTrk.prototype._sxid = 0x7f;
+  MTrk.prototype._image = function() {
+    var F = function() {}; F.prototype = this._orig;
+    var img = new F();
+    img._ch = this._ch;
+    img._sxid = this._sxid;
+    img._tick = this._tick;
+    return img;
+  };
   MTrk.prototype.send = function(msg) { this._orig.add(this._tick, msg); return this; };
   MTrk.prototype.tick = function(t) {
     if (t != parseInt(t) || t < 0) throw RangeError('Bad tick value: ' + t);
     if (!t) return this;
-    var F = function() {}; F.prototype = this._orig;
-    var ttt = new F();
-    ttt._tick = this._tick + t;
-    return ttt;
+    var img = this._image();
+    img._tick = this._tick + t;
+    return img;
+  };
+  MTrk.prototype.sxId = function(id) {
+    if (typeof id == 'undefined') id = MTrk.prototype._sxid;
+    if (id == this._sxid) return this;
+    if (id != parseInt(id) || id < 0 || id > 0x7f) throw RangeError('Bad MIDI value: ' + id);
+    var img = this._image();
+    img._sxid = id;
+    return img;
+  };
+  MTrk.prototype.ch = function(c) {
+    if (c == this._ch || typeof c == 'undefined' && typeof this._ch == 'undefined') return this;
+    if (typeof c != 'undefined') {
+      if (c != parseInt(c) || c < 0 || c > 15) throw RangeError('Bad channel value: ' + c  + ' (must be from 0 to 15)');
+    }
+    var img = this._image();
+    img._ch = c;
+    return img;
   };
   MTrk.prototype.note = function(c, n, v, t) {
     this.noteOn(c, n, v);
-    if (t > 0) this.tick(t).noteOff(c, n);
+    if (typeof this._ch == 'undefined') {
+      if (t > 0) this.tick(t).noteOff(c, n);
+    }
+    else {
+      if (v > 0) this.tick(v).noteOff(c);
+    }
     return this;
   };
-  MTrk.prototype.ch = function(n) {
-    if (typeof n == 'undefined') return this;
-    if (n != parseInt(n) || n < 0 || n > 15) throw RangeError('Bad channel value: ' + n  + ' (must be from 0 to 15)');
-    return new Chan(this._orig, n, this._tick);
-  };
-
-  function Chan(orig, chan, tick) {
-    this._orig = orig;
-    this._chan = chan;
-    this._tick = tick;
-  }
-  Chan.prototype = new MTrk();
-  Chan.prototype.tick = function(t) {
-    if (t != parseInt(t) || t < 0) throw RangeError('Bad tick value: ' + t);
-    if (!t) return this;
-    return new Chan(this._orig, this._chan, this._tick + t);
-  };
-  Chan.prototype.ch = function(n) {
-    if (typeof n == 'undefined') return this._orig.tick(this._tick);
-    if (n != parseInt(n) || n < 0 || n > 15) throw RangeError('Bad channel value: ' + n  + ' (must be from 0 to 15)');
-    if (n == this._chan) return this;
-    return new Chan(this._orig, n, this._tick);
-  };
-  Chan.prototype.note = function(n, v, t) {
-    this.noteOn(n, v);
-    if (t) this.tick(t).noteOff(n);
-    return this;
-  };
-
-  JZZ.lib.copyMidiHelpers(MTrk, Chan);
+  JZZ.lib.copyMidiHelpers(MTrk);
 
   function Event(t, s, d, off) {
     var midi;
@@ -4399,7 +4670,9 @@
     else this.play();
   };
   Player.prototype.sndOff = function() {
-    for (var c = 0; c < 16; c++) this._emit(JZZ.MIDI.allSoundOff(c));
+    var c;
+    for (c = 0; c < 16; c++) this._emit(JZZ.MIDI.allSoundOff(c));
+    for (c = 0; c < 16; c++) this._emit(JZZ.MIDI.resetAllControllers(c));
   };
   function _filter(e) { this._receive(e); }
   Player.prototype._filter = _filter;
@@ -4570,6 +4843,154 @@
     return this._ms2t(t);
   };
   JZZ.MIDI.SMF = SMF;
+
+  function _not_a_syx() { _error('Not a SYX file'); }
+
+  function SYX(arg) {
+    var self = this instanceof SYX ? this : self = new SYX();
+    self._orig = self;
+    if (typeof arg != 'undefined') {
+      if (arg instanceof SMF) {
+        self.copy(arg.player()._data);
+        return self;
+      }
+      if (arg instanceof SYX) {
+        self.copy(arg);
+        return self;
+      }
+      try {
+        if (arg instanceof ArrayBuffer) {
+          arg = String.fromCharCode.apply(null, new Uint8Array(arg));
+        }
+      }
+      catch (err) {/**/}
+      try {
+        if (arg instanceof Uint8Array || arg instanceof Int8Array) {
+          arg = String.fromCharCode.apply(null, new Uint8Array(arg));
+        }
+      }
+      catch (err) {/**/}
+      try {
+        if (arg instanceof Buffer) {
+          arg = arg.toString('binary');
+        }
+      }
+      catch (err) {/**/}
+      if (typeof arg != 'string') {
+        arg = String.fromCharCode.apply(null, arg);
+      }
+      var x;
+      var msg = [];
+      var i = 0;
+      while (i < arg.length) {
+        if (arg.charCodeAt(i) != 0xf0) _not_a_syx();
+        while (i < arg.length) {
+          x = arg.charCodeAt(i);
+          msg.push(x);
+          if (x == 0xf7) {
+            self.push(JZZ.MIDI(msg));
+            msg = [];
+            break;
+          }
+          i++;
+        }
+        i++;
+      }
+      if (msg.length) _not_a_syx();
+      return self;
+    }
+    return self;
+  }
+  SYX.version = function() { return _ver; };
+  SYX.prototype = [];
+  SYX.prototype.constructor = SYX;
+
+  SYX.prototype.copy = function(data) {
+    for (var i = 0; i < data.length; i++) if (!data[i].isSMF()) {
+      if (data[i].isFullSysEx()) this.push(JZZ.MIDI(data[i]));
+      else _not_a_syx();
+    }
+  };
+  SYX.prototype.dump = function() {
+    var i, j, s = '';
+    for (i = 0; i < this.length; i++) for (j = 0; j < this[i].length; j++) s += String.fromCharCode(this[i][j]);
+    return s;
+  };
+  SYX.prototype.toBuffer = function() {
+    return Buffer.from(this.dump(), 'binary');
+  };
+  SYX.prototype.toUint8Array = function() {
+    var str = this.dump();
+    var buf = new ArrayBuffer(str.length);
+    var arr = new Uint8Array(buf);
+    for (var i = 0; i < str.length; i++) arr[i] = str.charCodeAt(i);
+    return arr;
+  };
+  SYX.prototype.toArrayBuffer = function() {
+    return this.toUint8Array().buffer;
+  };
+  SYX.prototype.toInt8Array = function() {
+    return new Int8Array(this.toArrayBuffer());
+  };
+  SYX.prototype.toString = function() {
+    var i;
+    var a = ['SYX:'];
+    for (i = 0; i < this.length; i++) {
+      a.push(this[i].toString());
+    }
+    return a.join('\n  ');
+  };
+  SYX.prototype.player = function() {
+    var pl = new Player();
+    pl.ppqn = 96;
+    var i;
+    for (i = 0; i < this.length; i++) {
+      var e = JZZ.MIDI(this[i]);
+      e.tt = 0;
+      pl._data.push(e);
+    }
+    pl._type = 0;
+    pl._tracks = 1;
+    pl._timing();
+    pl.sndOff = function() {};
+    return pl;
+  };
+
+  SYX.prototype._ch = undefined;
+  SYX.prototype._sxid = 0x7f;
+  SYX.prototype._image = function() {
+    var F = function() {}; F.prototype = this._orig;
+    var img = new F();
+    img._ch = this._ch;
+    img._sxid = this._sxid;
+    return img;
+  };
+  SYX.prototype.add = function(msg) {
+    msg = JZZ.MIDI(msg);
+    if (msg.isFullSysEx()) this._orig.push(msg);
+    return this;
+  };
+  SYX.prototype.send = function(msg) { return this.add(msg); };
+  SYX.prototype.sxId = function(id) {
+    if (typeof id == 'undefined') id = SYX.prototype._sxid;
+    if (id == this._sxid) return this;
+    if (id != parseInt(id) || id < 0 || id > 0x7f) throw RangeError('Bad MIDI value: ' + id);
+    var img = this._image();
+    img._sxid = id;
+    return img;
+  };
+  SYX.prototype.ch = function(c) {
+    if (c == this._ch || typeof c == 'undefined' && typeof this._ch == 'undefined') return this;
+    if (typeof c != 'undefined') {
+      if (c != parseInt(c) || c < 0 || c > 15) throw RangeError('Bad channel value: ' + c  + ' (must be from 0 to 15)');
+    }
+    var img = this._image();
+    img._ch = c;
+    return img;
+  };
+  JZZ.lib.copyMidiHelpers(SYX);
+
+  JZZ.MIDI.SYX = SYX;
 });
 
 (function(global, factory) {
@@ -4588,7 +5009,7 @@
   if (!JZZ.synth) JZZ.synth = {};
   if (JZZ.synth.Tiny) return;
 
-  var _version = '1.2.3';
+  var _version = '1.2.6';
 
 function WebAudioTinySynth(opt){
   this.__proto__ = this.sy =
@@ -5468,6 +5889,19 @@ function WebAudioTinySynth(opt){
   this.ready();
 }
 
+  function _clone(obj, key, val) {
+    if (typeof key == 'undefined') return _clone(obj, [], []);
+    if (obj instanceof Object) {
+      for (var i = 0; i < key.length; i++) if (key[i] === obj) return val[i];
+      var ret;
+      if (obj instanceof Array) ret = []; else ret = {};
+      key.push(obj); val.push(ret);
+      for(var k in obj) if (obj.hasOwnProperty(k)) ret[k] = _clone(obj[k], key, val);
+      return ret;
+    }
+    return obj;
+  }
+
   var _ac = JZZ.lib.getAudioContext();
 
   var _synth = {};
@@ -5502,6 +5936,8 @@ function WebAudioTinySynth(opt){
         synth.setAudioContext(dest.context, dest);
       }
     };
+    port.setSynth = function(n, s, k) { synth.setTimbre(!!k, n, _clone(s)); };
+    port.getSynth = function(n, k) { return k ? _clone(synth.drummap[n - 35]) : _clone(synth.program[n]); };
     port._info = _engine._info(name);
     port._receive = function(msg) { synth.send(msg); };
     port._resume();
