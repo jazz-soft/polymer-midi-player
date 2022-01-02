@@ -45,5 +45,6 @@ In the project directory:
 run `npm install`  
 run `polymer serve --open`
 
-## Non-Polymer version
-https://github.com/jazz-soft/JZZ-gui-Player
+## See also:
+https://github.com/jazz-soft/JZZ-gui-Player  
+https://github.com/jazz-soft/react-midi-player
