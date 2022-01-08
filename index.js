@@ -46,19 +46,8 @@ export class MidiPlayer extends PolymerElement {
       xhttp.onreadystatechange = function() {
         if (this.readyState == 4) {
           if (this.status == 200) {
-            var r, i;
-            var data = '';
-            r = xhttp.response;
-            if (r instanceof ArrayBuffer) {
-              r = new Uint8Array(r);
-              for (i = 0; i < r.length; i++) data += String.fromCharCode(r[i]);
-            }
-            else {
-              r = xhttp.responseText;
-              for (i = 0; i < r.length; i++) data += String.fromCharCode(r.charCodeAt(i) & 0xff);
-            }
             try {
-              self.player.load(new JZZ.MIDI.SMF(data));
+              self.player.load(new JZZ.MIDI.SMF(xhttp.response));
               self.player.loop(self.loop || 0);
               if (self.autoplay) self.player.play();
             }
