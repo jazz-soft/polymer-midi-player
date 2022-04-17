@@ -21,10 +21,10 @@
   "dependencies": {
     "@polymer/polymer": "^3.4.1",
     "@webcomponents/webcomponentsjs": "^2.6.0",
-    "jzz": "^1.4.7",
-    "jzz-gui-player": "^1.5.5",
-    "jzz-midi-smf": "^1.6.7",
-    "jzz-synth-tiny": "^1.2.8"
+    "jzz": "^1.5.0",
+    "jzz-gui-player": "^1.5.8",
+    "jzz-midi-smf": "^1.6.8",
+    "jzz-synth-tiny": "^1.2.9"
   },
   "repository": {
     "type": "git",
@@ -34,7 +34,7 @@
   "homepage": "https://github.com/jazz-soft/polymer-midi-player#readme",
   "license": "MIT",
   "devDependencies": {
-    "grunt": "^1.4.1",
-    "grunt-contrib-concat": "^2.0.0"
+    "grunt": "^1.5.2",
+    "grunt-contrib-concat": "^2.1.0"
   }
 }
