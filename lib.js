@@ -14,7 +14,7 @@
 })(this, function() {
 
   var _scope = typeof window === 'undefined' ? global : window;
-  var _version = '1.5.0';
+  var _version = '1.5.6';
   var i, j, k, m, n;
 
   /* istanbul ignore next */
@@ -2780,6 +2780,39 @@
   JZZ.lib = {};
   JZZ.lib.now = _now;
   JZZ.lib.schedule = _schedule;
+  var _sch_list = [];
+  var _sch_worker;
+  var _sch_count = 0;
+  try {
+    var _blob = URL.createObjectURL(new Blob(['(', function() {
+      function tick() {
+        postMessage({});
+        setTimeout(tick, 0);
+      }
+      tick();
+    }.toString(), ')()'], { type: 'application/javascript' }));
+    var _sch_tick = function() {
+      var n = _sch_list.length;
+      // cannot use i < _sch_list.length !
+      for (var i = 0; i < n; i++) _sch_list.shift()();
+      _sch_count++;
+      if (_sch_count > 20 && _sch_worker) {
+        _sch_worker.terminate();
+        _sch_worker = undefined;
+      }
+    };
+    var _sch = function(x) {
+      _sch_list.push(x);
+      _sch_count = 0;
+      if (!_sch_worker) {
+        _sch_worker = new Worker(_blob);
+        _sch_worker.onmessage = _sch_tick;
+      }
+    };
+    _sch(function() { JZZ.lib.schedule = _sch; });
+  }
+  catch (e) {}
+
   JZZ.lib.openMidiOut = function(name, engine) {
     var port = new _M();
     engine._openOut(port);
@@ -2834,7 +2867,7 @@
             if (!osc.stop) osc.stop = osc.noteOff;
             osc.start(0.1); osc.stop(0.11);
           }
-          else {
+          else if (typeof document != 'undefined') {
             document.removeEventListener('touchstart', _activateAudioContext);
             document.removeEventListener('touchend', _activateAudioContext);
             document.removeEventListener('mousedown', _activateAudioContext);
@@ -2846,8 +2879,8 @@
           document.addEventListener('touchend', _activateAudioContext);
           document.addEventListener('mousedown', _activateAudioContext);
           document.addEventListener('keydown', _activateAudioContext);
-          _activateAudioContext();
         }
+        _activateAudioContext();
       }
     }
   }
@@ -4280,7 +4313,7 @@
   /* istanbul ignore next */
   if (JZZ.MIDI.SMF) return;
 
-  var _ver = '1.6.8';
+  var _ver = '1.7.1';
 
   var _now = JZZ.lib.now;
   function _error(s) { throw new Error(s); }
@@ -4301,6 +4334,13 @@
   }
   function _num4le(n) {
     return String.fromCharCode(n & 0xff) + String.fromCharCode((n >> 8) & 0xff) + String.fromCharCode((n >> 16) & 0xff) + String.fromCharCode((n >> 24) & 0xff);
+  }
+  function _u8a2s(u) {
+    var s = '';
+    var len = u.byteLength;
+    // String.fromCharCode.apply(null, u) throws "RangeError: Maximum call stack size exceeded" on large files
+    for (var i = 0; i < len; i++) s += String.fromCharCode(u[i]);
+    return s;
   }
 
   function SMF() {
@@ -4324,30 +4364,31 @@
         for (var i = 0; i < arguments[0].length; i++) self[0].add(0, arguments[0][i]);
         return self;
       }
+      var data;
       try {
         if (arguments[0] instanceof ArrayBuffer) {
-          self.load(String.fromCharCode.apply(null, new Uint8Array(arguments[0])));
-          return self;
+          data = _u8a2s(new Uint8Array(arguments[0]));
         }
       }
       catch (err) {/**/}
       try {
         if (arguments[0] instanceof Uint8Array || arguments[0] instanceof Int8Array) {
-          self.load(String.fromCharCode.apply(null, new Uint8Array(arguments[0])));
-          return self;
+          data = _u8a2s(new Uint8Array(arguments[0]));
         }
       }
       catch (err) {/**/}
       try {
         /* istanbul ignore next */
         if (arguments[0] instanceof Buffer) {
-          self.load(arguments[0].toString('binary'));
-          return self;
+          data = arguments[0].toString('binary');
         }
       }
       catch (err) {/**/}
       if (typeof arguments[0] == 'string' && arguments[0] != '0' && arguments[0] != '1' && arguments[0] != '2') {
-        self.load(arguments[0]);
+        data = arguments[0];
+      }
+      if (data) {
+        self.load(data);
         return self;
       }
       type = parseInt(arguments[0]);
@@ -5352,13 +5393,13 @@
       }
       try {
         if (arg instanceof ArrayBuffer) {
-          arg = String.fromCharCode.apply(null, new Uint8Array(arg));
+          arg = _u8a2s(new Uint8Array(arg));
         }
       }
       catch (err) {/**/}
       try {
         if (arg instanceof Uint8Array || arg instanceof Int8Array) {
-          arg = String.fromCharCode.apply(null, new Uint8Array(arg));
+          arg = _u8a2s(new Uint8Array(arg));
         }
       }
       catch (err) {/**/}
@@ -5500,6 +5541,7 @@
 });
 
 (function(global, factory) {
+  /* istanbul ignore next */
   if (typeof exports === 'object' && typeof module !== 'undefined') {
     module.exports = factory;
   }
@@ -5511,11 +5553,14 @@
   }
 })(this, function(JZZ) {
 
+  /* istanbul ignore next */
   if (!JZZ) return;
+  /* istanbul ignore next */
   if (!JZZ.synth) JZZ.synth = {};
+  /* istanbul ignore next */
   if (JZZ.synth.Tiny) return;
 
-  var _version = '1.2.9';
+  var _version = '1.3.3';
 
 function WebAudioTinySynth(opt){
   this.__proto__ = this.sy =
@@ -5871,6 +5916,7 @@ function WebAudioTinySynth(opt){
       /**/
       this.preroll=0.2;
       this.relcnt=0;
+      /* istanbul ignore next */
       setInterval(
         function(){
           if(++this.relcnt>=3){
@@ -6026,7 +6072,7 @@ function WebAudioTinySynth(opt){
     _note:function(t,ch,n,v,p){
       var out,sc,pn;
       var o=[],g=[],vp=[],fp=[],r=[];
-      var f=440*Math.pow(2,(n-69 + this.masterTuningC + this.tuningC[ch] + (this.masterTuningF + this.tuningF[ch] + this.scaleTuning[ch][n%12]))/12);
+      var f=440*Math.pow(2,(n-69 + this.masterTuningC + this.tuningC[ch] + (this.masterTuningF + this.tuningF[ch]/8192 + this.scaleTuning[ch][n%12]))/12);
       this._limitVoices(ch,n);
       for(var i=0;i<p.length;++i){
         pn=p[i];
@@ -6255,7 +6301,7 @@ function WebAudioTinySynth(opt){
               this.brange[ch]=(this.brange[ch]&0x3f80)|msg[2];
               break;
             case 1:
-              this.tuningF[ch]=((this.tuningF[ch]+0x2000)&0x3f80)|msg[2]-0x2000;
+              this.tuningF[ch]=(((this.tuningF[ch]+0x2000)&0x3f80)|msg[2])-0x2000;
               break;
             case 2: break;
           }
@@ -6423,7 +6469,11 @@ function WebAudioTinySynth(opt){
     return obj;
   }
 
-  var _ac = JZZ.lib.getAudioContext();
+  var _ac;
+  function initAC() {
+    if (!_ac) _ac = JZZ.lib.getAudioContext();
+    return !!_ac;
+  }
 
   var _synth = {};
   var _noname = [];
@@ -6432,7 +6482,7 @@ function WebAudioTinySynth(opt){
   _engine._info = function(name) {
     if (!name) name = 'JZZ.synth.Tiny';
     return {
-      type: 'Web Audo',
+      type: 'Web Audio',
       name: name,
       manufacturer: 'virtual',
       version: _version
@@ -6440,7 +6490,12 @@ function WebAudioTinySynth(opt){
   };
 
   _engine._openOut = function(port, name) {
-    if (!_ac) { port._crash('AudioContext not supported'); return; }
+    initAC();
+    /* istanbul ignore next */
+    if (!_ac) {
+      port._crash('AudioContext not supported');
+      return;
+    }
     var synth;
     if (typeof name !== 'undefined') {
       name = '' + name;
@@ -6469,7 +6524,7 @@ function WebAudioTinySynth(opt){
   };
 
   JZZ.synth.Tiny.register = function(name) {
-    return _ac ? JZZ.lib.registerMidiOut(name, _engine) : false;
+    return initAC() ? JZZ.lib.registerMidiOut(name, _engine) : false;
   };
 
   JZZ.synth.Tiny.version = function() { return _version; };
