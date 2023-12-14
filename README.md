@@ -4,6 +4,7 @@
 [![Published on webcomponents.org](https://img.shields.io/badge/webcomponents.org-published-blue.svg)](https://www.webcomponents.org/element/polymer-midi-player)
 
 ## MIDI Player Web Component
+Supports MIDI 1.0 SMF and MIDI 2.0 Clips
 
 ![midi-player](https://jazz-soft.github.io/img/midi-player.png)
 
